@@ -16,5 +16,32 @@
   "devDependencies": {
     "electron": "^45.0.0",
     "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "hu.beregszaszi.gamehub",
+    "productName": "GameHub",
+    "directories": {
+      "output": "dist",
+      "buildResources": "assets"
+    },
+    "files": [
+      "src/**/*",
+      "assets/icon.png",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.png"
+    },
+    "portable": {
+      "artifactName": "GameHub-${version}-portable.exe"
+    }
   }
 }
