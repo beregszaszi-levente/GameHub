@@ -1,0 +1,29 @@
+# Review package: 1640144..ce0ce9d
+
+## Commits
+ce0ce9d feat: Steam-könyvtár import IPC handler és UI dialógus
+
+## Files changed
+ scripts/test-steam-import-ipc.js | 240 +++++++++++++++++++++++++++++++++++++
+ scripts/test-steam-import.js     |  14 +++
+ src/main/ipc.js                  | 154 ++++++++++++++++-
+ src/main/library.js              |  13 ++-
+ src/main/steam-import.js         |  23 ++--
+ src/preload/preload.js           |   4 +
+ src/renderer/app.js              | 160 +++++++++++++++++++++
+ src/renderer/index.html          |  39 +++++++
+ src/renderer/styles.css          | 113 ++++++++++++++++
+ 9 files changed, 749 insertions(+), 11 deletions(-)
+
+## Diff
+The diff above was generated from `git diff -U10 1640144..ce0ce9d`. Key changes:
+
+1. `src/main/ipc.js` — added `steam:import`, `steam:importRoot`, `steam:addGames` handlers; Steam helpers (`steamAppsFromPath`, `addSteamRoot`, `collectSteamGames`).
+2. `src/main/library.js` — added `steamImportPath: null` to `defaultState()`, persistence in `setSettings()`, `steam-import` source preservation in `normalizeGame()`, normalization in `normalizeState()`.
+3. `src/main/steam-import.js` — `findSteamLibraryFolders` now also looks in `<root>\steamapps\libraryfolders.vdf` (real Steam layout).
+4. `src/preload/preload.js` — exposed `steamImport`, `steamImportRoot`, `steamAddGames`.
+5. `src/renderer/app.js` — Steam import flow, dialog state, selection, add games, close overlay reset.
+6. `src/renderer/index.html` — Steam import button in top bar, import dialog overlay markup.
+7. `src/renderer/styles.css` — dialog, list, item, badge, count, empty state, responsive styling.
+8. `scripts/test-steam-import.js` — added real Steam layout test (18 total).
+9. `scripts/test-steam-import-ipc.js` — new integration test (7 tests).
