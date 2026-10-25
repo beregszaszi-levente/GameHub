@@ -162,7 +162,7 @@ function visibleGames() {
   return list;
 }
 
-function cardMarkup(game, index) {
+function cardMarkup(game, index, animate = false) {
   const hue = hashHue(game.title);
   const cover = game.coverUrl
     ? `<img src="${esc(game.coverUrl)}" alt="" loading="lazy" />`
@@ -176,9 +176,11 @@ function cardMarkup(game, index) {
         ? `${formatPlaytime(game.playtimeSec)} · ${formatLastPlayed(game.lastPlayed)}`
         : 'még nem játszottál vele';
 
+  const animStyle = animate ? `style="animation-delay:${Math.min(index * 18, 220)}ms"` : '';
+
   return `
     <article class="card ${game.running ? 'is-running' : ''}" data-id="${esc(game.id)}"
-             role="listitem" tabindex="0" style="animation-delay:${Math.min(index * 18, 220)}ms">
+             role="listitem" tabindex="0" ${animStyle}>
       <div class="card-art" style="--h:${hue}">
         ${cover}
         <div class="card-shade"></div>
@@ -195,6 +197,8 @@ function cardMarkup(game, index) {
       </div>
     </article>`;
 }
+
+let renderCount = 0;
 
 function render() {
   const list = visibleGames();
@@ -215,7 +219,11 @@ function render() {
   el('view-title').textContent = titles[state.view][0];
   el('view-subtitle').textContent = titles[state.view][1];
 
-  el('grid').innerHTML = list.map((game, index) => cardMarkup(game, index)).join('');
+  // Az animáció csak az első renderen és nézetváltáson fusson le, nem minden ticknél.
+  const isFirst = renderCount === 0;
+  renderCount += 1;
+
+  el('grid').innerHTML = list.map((game, index) => cardMarkup(game, index, isFirst)).join('');
 
   const empty = el('empty');
   if (list.length === 0) {
@@ -257,65 +265,100 @@ function renderDetail(id) {
     return;
   }
 
-  const hue = hashHue(game.title);
-  const hero = el('detail-hero');
-  hero.style.setProperty('--h', hue);
+  try {
+    const hue = hashHue(game.title);
+    const hero = el('detail-hero');
+    if (hero) hero.style.setProperty('--h', hue);
 
-  const cover = el('detail-cover');
-  if (game.coverUrl) {
-    cover.src = game.coverUrl;
-    cover.classList.remove('hidden');
-    el('detail-fallback').classList.add('hidden');
-  } else {
-    cover.removeAttribute('src');
-    cover.classList.add('hidden');
-    el('detail-fallback').classList.remove('hidden');
+    const cover = el('detail-cover');
+    const fallback = el('detail-fallback');
+    if (game.coverUrl) {
+      if (cover) {
+        cover.src = game.coverUrl;
+        cover.classList.remove('hidden');
+      }
+      if (fallback) fallback.classList.add('hidden');
+    } else {
+      if (cover) {
+        cover.removeAttribute('src');
+        cover.classList.add('hidden');
+      }
+      if (fallback) fallback.classList.remove('hidden');
+    }
+
+    const titleEl = el('detail-title');
+    const subEl = el('detail-sub');
+    const timeEl = el('detail-time');
+    const lastEl = el('detail-last');
+    const launchEl = el('detail-launch');
+
+    if (titleEl) titleEl.textContent = game.title;
+    if (subEl)
+      subEl.textContent = `${formatPlaytime(game.playtimeSec)} · ${formatLastPlayed(
+        game.lastPlayed
+      )}`;
+    if (timeEl)
+      timeEl.textContent = game.running ? 'most játszik' : formatPlaytime(game.playtimeSec);
+    if (lastEl) lastEl.textContent = formatLastPlayed(game.lastPlayed);
+    if (launchEl) {
+      launchEl.textContent = game.launch.pathDisplay || 'nincs beállítva';
+      launchEl.title = game.launch.pathDisplay || '';
+    }
+
+    const note = el('detail-note');
+    const noteText = el('detail-note-text');
+    const fix = el('detail-fix-name');
+    if (note) note.classList.add('hidden');
+    if (fix) fix.classList.add('hidden');
+
+    if (game.needsRename) {
+      if (noteText) {
+        noteText.textContent =
+          'A mappa neve pontra végződik, amit a Windows nem tud kezelni – emiatt a játék ' +
+          'el sem indul. Az átnevezés csak a mappa nevét változtatja meg, a játékfájlokhoz nem nyúl.';
+      }
+      if (note) note.classList.remove('hidden');
+      if (fix) fix.classList.remove('hidden');
+    } else if (game.folderMissing) {
+      if (noteText) {
+        noteText.textContent =
+          'A játék mappája nem található. Lehet, hogy áthelyezted vagy törölted.';
+      }
+      if (note) note.classList.remove('hidden');
+    } else if (game.launcherMissing) {
+      if (noteText) {
+        noteText.textContent =
+          'Az indító nem található. Nyisd meg a szerkesztőt, és válaszd ki újra az indítót.';
+      }
+      if (note) note.classList.remove('hidden');
+    }
+
+    const play = el('detail-play');
+    if (play) {
+      play.disabled = Boolean(game.running);
+      play.innerHTML = game.running
+        ? '<span class="play-icon"></span> Már fut'
+        : '<span class="play-icon"></span> Játszás';
+    }
+
+    const fav = el('detail-fav');
+    if (fav) fav.textContent = game.favorite ? 'Kedvencek közül ki' : 'Kedvencekhez';
+  } catch (err) {
+    console.error('[renderDetail] hiba:', err);
+    toast('Hiba a részletek betöltésekor.', 'error');
   }
-
-  el('detail-title').textContent = game.title;
-  el('detail-sub').textContent = `${formatPlaytime(game.playtimeSec)} · ${formatLastPlayed(
-    game.lastPlayed
-  )}`;
-  el('detail-time').textContent = game.running ? 'most játszik' : formatPlaytime(game.playtimeSec);
-  el('detail-last').textContent = formatLastPlayed(game.lastPlayed);
-  el('detail-launch').textContent = game.launch.pathDisplay || 'nincs beállítva';
-  el('detail-launch').title = game.launch.pathDisplay || '';
-
-  const note = el('detail-note');
-  const noteText = el('detail-note-text');
-  const fix = el('detail-fix-name');
-  note.classList.add('hidden');
-  fix.classList.add('hidden');
-
-  if (game.needsRename) {
-    noteText.textContent =
-      'A mappa neve pontra végződik, amit a Windows nem tud kezelni – emiatt a játék ' +
-      'el sem indul. Az átnevezés csak a mappa nevét változtatja meg, a játékfájlokhoz nem nyúl.';
-    note.classList.remove('hidden');
-    fix.classList.remove('hidden');
-  } else if (game.folderMissing) {
-    noteText.textContent =
-      'A játék mappája nem található. Lehet, hogy áthelyezted vagy törölted.';
-    note.classList.remove('hidden');
-  } else if (game.launcherMissing) {
-    noteText.textContent =
-      'Az indító nem található. Nyisd meg a szerkesztőt, és válaszd ki újra az indítót.';
-    note.classList.remove('hidden');
-  }
-
-  const play = el('detail-play');
-  play.disabled = Boolean(game.running);
-  play.innerHTML = game.running
-    ? '<span class="play-icon"></span> Már fut'
-    : '<span class="play-icon"></span> Játszás';
-
-  el('detail-fav').textContent = game.favorite ? 'Kedvencek közül ki' : 'Kedvencekhez';
 }
 
 function openDetail(id) {
+  const game = gameById(id);
+  if (!game) {
+    toast('Ez a játék már nem szerepel a listában.', 'error');
+    return;
+  }
   state.detailId = id;
   renderDetail(id);
-  el('detail').classList.remove('hidden');
+  const detail = el('detail');
+  if (detail) detail.classList.remove('hidden');
 }
 
 /* ---------------------------- editor ------------------------------------ */
@@ -499,6 +542,7 @@ function bind() {
   document.querySelectorAll('.nav-item[data-view]').forEach((button) => {
     button.addEventListener('click', () => {
       state.view = button.dataset.view;
+      renderCount = 0; // animáció újra lejátszódása nézetváltáskor
       document
         .querySelectorAll('.nav-item[data-view]')
         .forEach((item) => item.classList.toggle('is-active', item === button));
@@ -508,11 +552,13 @@ function bind() {
 
   el('search').addEventListener('input', (event) => {
     state.query = event.target.value;
+    renderCount = 0; // animáció újra lejátszódása kereséskor
     render();
   });
 
   el('sort').addEventListener('change', (event) => {
     state.sort = event.target.value;
+    renderCount = 0; // animáció újra lejátszódása rendezéskor
     render();
   });
 

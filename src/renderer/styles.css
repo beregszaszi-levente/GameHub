@@ -33,6 +33,10 @@ body {
   height: 100%;
 }
 
+html {
+  height: 100%;
+}
+
 body {
   margin: 0;
   font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
@@ -40,6 +44,7 @@ body {
   color: var(--text);
   background: var(--bg);
   overflow: hidden;
+  height: 100%;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -94,7 +99,7 @@ select:focus-visible,
   z-index: 1;
   display: grid;
   grid-template-columns: var(--sidebar-w) 1fr;
-  height: 100vh;
+  height: 100%;
 }
 
 /* ============================ sidebar =================================== */
@@ -217,7 +222,7 @@ select:focus-visible,
   display: flex;
   flex-direction: column;
   min-width: 0;
-  height: 100vh;
+  height: 100%;
 }
 
 .topbar {
