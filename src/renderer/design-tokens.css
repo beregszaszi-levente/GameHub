@@ -1,0 +1,127 @@
+/* ==========================================================================
+   GameHub – Design Tokens (ui-ux-pro-max + design-system)
+   Three-layer: Primitive → Semantic → Component
+   ========================================================================== */
+
+/* ── Primitive tokens (raw values) ───────────────────────────────────────── */
+:root {
+  /* Brand / gaming palette – neon purple + rose */
+  --color-purple-600: #7c3aed;
+  --color-purple-500: #a78bfa;
+  --color-rose-500: #f43f5e;
+  --color-rose-600: #e11d48;
+
+  /* Neutral dark (OLED) */
+  --color-black: #000000;
+  --color-black-800: #0a0a0a;
+  --color-black-700: #0f0f23;
+  --color-black-600: #1a1a2e;
+  --color-black-500: #27273b;
+  --color-gray-400: #94a3b8;
+  --color-gray-300: #cbd5e1;
+  --color-white: #ffffff;
+
+  /* Semantic gaming accents */
+  --color-accent-green: #22c55e;
+  --color-accent-amber: #f59e0b;
+  --color-destructive: #ef4444;
+}
+
+/* ── Semantic tokens (purpose aliases) ───────────────────────────────────── */
+:root {
+  --color-primary: var(--color-purple-600);
+  --color-primary-hover: var(--color-purple-500);
+  --color-on-primary: var(--color-white);
+
+  --color-secondary: var(--color-purple-500);
+  --color-on-secondary: var(--color-black-700);
+
+  --color-accent: var(--color-rose-500);
+  --color-accent-hover: var(--color-rose-600);
+  --color-on-accent: var(--color-black-700);
+
+  --color-background: var(--color-black-700);
+  --color-background-surface: var(--color-black-600);
+  --color-foreground: var(--color-white);
+
+  --color-card: var(--color-black-600);
+  --color-card-hover: var(--color-black-500);
+  --color-card-foreground: var(--color-white);
+
+  --color-muted: var(--color-black-500);
+  --color-muted-foreground: var(--color-gray-400);
+
+  --color-border: var(--color-purple-600);
+  --color-border-hover: var(--color-purple-500);
+  --color-border-subtle: rgba(124, 58, 237, 0.25);
+
+  --color-destructive: var(--color-destructive);
+  --color-on-destructive: var(--color-black-700);
+
+  --color-ring: var(--color-primary);
+  --color-glow: rgba(124, 58, 237, 0.45);
+  --color-glow-rose: rgba(244, 63, 94, 0.35);
+
+  /* Typography */
+  --font-heading: 'Russo One', 'Segoe UI Variable Text', 'Segoe UI', sans-serif;
+  --font-body: 'Chakra Petch', 'Segoe UI Variable Text', 'Segoe UI', sans-serif;
+
+  /* Radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-full: 9999px;
+
+  /* Shadows / glow */
+  --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 24px 48px rgba(0, 0, 0, 0.6);
+  --shadow-glow: 0 0 30px var(--color-glow);
+  --shadow-glow-rose: 0 0 30px var(--color-glow-rose);
+
+  /* Spacing */
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  /* Transitions */
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-base: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-spring: 350ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ── Component tokens (component-specific) ───────────────────────────────── */
+:root {
+  /* Sidebar */
+  --sidebar-width: 252px;
+  --sidebar-bg: var(--color-black-700);
+  --sidebar-border: var(--color-border-subtle);
+
+  /* Cards */
+  --card-bg: var(--color-card);
+  --card-border: 1px solid var(--color-border-subtle);
+  --card-radius: var(--radius-lg);
+  --card-hover-transform: translateY(-6px);
+  --card-hover-shadow: var(--shadow-lg);
+
+  /* Buttons */
+  --btn-height: 44px;
+  --btn-radius: var(--radius-md);
+  --btn-primary-bg: var(--color-primary);
+  --btn-primary-hover: var(--color-primary-hover);
+  --btn-primary-text: var(--color-on-primary);
+  --btn-accent-bg: var(--color-accent);
+  --btn-accent-hover: var(--color-accent-hover);
+  --btn-ghost-bg: rgba(255, 255, 255, 0.04);
+  --btn-ghost-hover: rgba(255, 255, 255, 0.1);
+
+  /* Inputs */
+  --input-bg: rgba(255, 255, 255, 0.06);
+  --input-border: 1px solid var(--color-border-subtle);
+  --input-focus-ring: 0 0 0 3px var(--color-ring);
+}
