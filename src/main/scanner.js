@@ -242,6 +242,27 @@ function findCoverImage(folderExt) {
   return null;
 }
 
+/**
+ * A scan során talált borítót a covers mappába másolja, mert a cover://
+ * protokoll csak innen szolgál ki. Hiba esetén null-t ad vissza, hogy a
+ * játék felvétele ne hiúsuljon meg.
+ */
+function copyCoverToStore(store, source, gameId) {
+  if (!source || !gameId || !store?.coverDir) return null;
+  const ext = path.extname(source).toLowerCase();
+  if (!COVER_FALLBACK_EXT.test(ext)) return null;
+
+  try {
+    fs.mkdirSync(store.coverDir, { recursive: true });
+    const target = path.join(store.coverDir, `${gameId}-${Date.now()}${ext}`);
+    fs.copyFileSync(toExtended(source), toExtended(target));
+    return target;
+  } catch (err) {
+    console.error('[scan] a borító bemásolása nem sikerült:', err.message);
+    return null;
+  }
+}
+
 function detectGame(folderExt) {
   const folderName = path.win32.basename(fromExtended(folderExt));
   const files = collectFiles(folderExt);
@@ -382,6 +403,10 @@ function mergeScanResults(store, scan) {
     );
 
     if (!existing) {
+      // Az automatikusan talált borítót a covers mappába másoljuk, különben
+      // a cover:// protokoll (ami csak a coverDir-ből szolgál ki) nem találná meg.
+      const copied = copyCoverToStore(store, detected.cover, detected.id);
+      if (copied) detected.cover = copied;
       store.data.games.push(detected);
       summary.added++;
       continue;
@@ -404,6 +429,15 @@ function mergeScanResults(store, scan) {
         changed = true;
       }
     }
+    // Re-scan: a meglévő, borító nélküli játék megkapja a felismert borítót.
+    // A felhasználó által beállított borítót soha nem írjuk felül.
+    if (!existing.cover && detected.cover) {
+      const copied = copyCoverToStore(store, detected.cover, existing.id);
+      if (copied) {
+        existing.cover = copied;
+        changed = true;
+      }
+    }
     if (changed) summary.updated++;
     else summary.unchanged++;
   }
@@ -417,5 +451,6 @@ module.exports = {
   mergeScanResults,
   detectGame,
   cleanTitle,
-  extractProcessNames
+  extractProcessNames,
+  copyCoverToStore
 };

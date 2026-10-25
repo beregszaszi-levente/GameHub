@@ -73,6 +73,16 @@ function withTempGame(images, fn) {
   }
 }
 
+/** Ideiglenes covers mappa a merge-tesztekhez (a valódi %APPDATA% helyett). */
+function withTempCoverDir(fn) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gh-covers-test-'));
+  try {
+    return fn(dir);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 // 1. A prioritált lista élén a folder.jpg áll, akkor is, ha más kép is van.
 withTempGame(['cover.jpg', 'folder.jpg'], (dir) => {
   const game = detectGame(toExtended(dir));
@@ -113,6 +123,49 @@ withTempGame(['folder.jpg'], (dir) => {
   const store = { games: [existing], data: { games: [] }, scheduleSave() {} };
   mergeScanResults(store, { games: [detected], errors: [] });
   assert.strictEqual(existing.cover, manualCover, 'a kézi borító nem íródhat felül');
+  checks++;
+});
+
+// 5. Új játéknál a borító a covers mappába kerül (a cover:// protokoll miatt).
+withTempGame(['folder.jpg'], (dir) => {
+  const detected = detectGame(toExtended(dir));
+  withTempCoverDir((coverDir) => {
+    const store = { games: [], data: { games: [] }, coverDir, scheduleSave() {} };
+    mergeScanResults(store, { games: [detected], errors: [] });
+    const saved = store.data.games[0];
+    assert.ok(saved, 'a játéknak be kell kerülnie a könyvtárba');
+    assert.ok(
+      displayPath(saved.cover || '')
+        .toLowerCase()
+        .startsWith(coverDir.toLowerCase()),
+      'a borítónak a covers mappába kell kerülnie'
+    );
+    assert.strictEqual(
+      fs.readFileSync(saved.cover, 'utf8'),
+      'fake-image',
+      'a másolat tartalma egyezzen'
+    );
+    assert.ok(fs.existsSync(path.join(dir, 'folder.jpg')), 'a forrásképet meg kell hagyni');
+  });
+  checks++;
+});
+
+// 6. Re-scan: a meglévő, borító nélküli játék is megkapja a felismert borítót.
+withTempGame(['folder.jpg'], (dir) => {
+  const detected = detectGame(toExtended(dir));
+  withTempCoverDir((coverDir) => {
+    const existing = { ...detected, cover: null };
+    const store = { games: [existing], data: { games: [existing] }, coverDir, scheduleSave() {} };
+    const summary = mergeScanResults(store, { games: [detected], errors: [] });
+    assert.strictEqual(summary.updated, 1, 'a borító pótlása frissítésnek számít');
+    assert.ok(
+      displayPath(existing.cover || '')
+        .toLowerCase()
+        .startsWith(coverDir.toLowerCase()),
+      'a meglévő játék borítóját is a covers mappába kell másolni'
+    );
+    assert.strictEqual(fs.readFileSync(existing.cover, 'utf8'), 'fake-image');
+  });
   checks++;
 });
 

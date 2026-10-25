@@ -5,7 +5,13 @@ const path = require('node:path');
 const { ipcMain, dialog, shell } = require('electron');
 
 const { displayPath, exists, hasInvalidName } = require('./paths');
-const { scanRoots, mergeScanResults, detectGame, cleanTitle } = require('./scanner');
+const {
+  scanRoots,
+  mergeScanResults,
+  detectGame,
+  cleanTitle,
+  copyCoverToStore
+} = require('./scanner');
 const { slugId } = require('./library');
 const { launchGame } = require('./launcher');
 const { renameFolder } = require('./rename');
@@ -47,6 +53,13 @@ function registerIpc({ library, getWindow }) {
     } catch {
       return null;
     }
+  }
+
+  /** Igaz, ha a borító a kezelt covers mappában van (a scan-borító a játék mappájában lehet). */
+  function isManagedCover(cover) {
+    if (!cover) return false;
+    const dir = path.resolve(library.coverDir).toLowerCase() + path.sep;
+    return path.resolve(cover).toLowerCase().startsWith(dir);
   }
 
   function publicState() {
@@ -96,6 +109,9 @@ function registerIpc({ library, getWindow }) {
       (g) => normalizeFolderForCompare(g.folder) === normalizeFolderForCompare(detected.folder)
     );
     if (existing) return { ok: true, id: existing.id, existed: true };
+    // A scan-borítót a covers mappába másoljuk, hogy a cover:// protokoll elérje.
+    const copied = copyCoverToStore(library, detected.cover, detected.id);
+    if (copied) detected.cover = copied;
     library.data.games.push(detected);
     library.saveNow();
     return { ok: true, id: detected.id };
@@ -177,7 +193,9 @@ function registerIpc({ library, getWindow }) {
   ipcMain.handle('game:remove', (_event, id) => {
     const game = library.getGame(id);
     if (!game) return { ok: false, message: 'Ismeretlen játék.' };
-    if (game.cover) {
+    // Csak a kezelt covers mappában lévő borítót töröljük; a scan által
+    // felismert kép a játék saját mappájában van, azt nem szabad törölni.
+    if (isManagedCover(game.cover)) {
       try {
         fs.unlinkSync(game.cover);
       } catch {
@@ -235,13 +253,11 @@ function registerIpc({ library, getWindow }) {
   // --- borítók ------------------------------------------------------------
   function deleteOldCover(game, keep) {
     if (!game.cover || game.cover === keep) return;
-    const dir = path.resolve(library.coverDir).toLowerCase();
-    if (path.resolve(game.cover).toLowerCase().startsWith(dir)) {
-      try {
-        fs.unlinkSync(game.cover);
-      } catch {
-        /* ignore */
-      }
+    if (!isManagedCover(game.cover)) return;
+    try {
+      fs.unlinkSync(game.cover);
+    } catch {
+      /* ignore */
     }
   }
 
