@@ -14,6 +14,13 @@ const { PlaytimeTracker } = require('./tracker');
 const IMAGE_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp']);
 const COVER_SCHEME = 'cover://local/';
 
+/** Két mappaútvonal összehasonlítása fájlrendszeri szintre (kiszűri a \\?\ előtagot és a záró pontot/szóközt). */
+function normalizeFolderForCompare(folder) {
+  return displayPath(folder)
+    .replace(/[. ]+$/g, '')
+    .toLowerCase();
+}
+
 function registerIpc({ library, getWindow }) {
   const tracker = new PlaytimeTracker({
     library,
@@ -86,7 +93,7 @@ function registerIpc({ library, getWindow }) {
 
   function addFromDetection(detected) {
     const existing = library.games.find(
-      (g) => g.folder.toLowerCase() === detected.folder.toLowerCase()
+      (g) => normalizeFolderForCompare(g.folder) === normalizeFolderForCompare(detected.folder)
     );
     if (existing) return { ok: true, id: existing.id, existed: true };
     library.data.games.push(detected);

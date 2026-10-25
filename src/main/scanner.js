@@ -325,12 +325,19 @@ function scanRoots(settings) {
  * - Új mappa -> új játék
  * - Meglévő -> csak az automatikus mezők frissülnek (cím/indító, ha nem szerkesztetted kézzel)
  */
+/** Két mappaútvonal összehasonlítása fájlrendszeri szintre (kiszűri a \\?\ előtagot és a záró pontot/szóközt). */
+function normalizeFolderForCompare(folder) {
+  return displayPath(folder)
+    .replace(/[. ]+$/g, '')
+    .toLowerCase();
+}
+
 function mergeScanResults(store, scan) {
   const summary = { added: 0, updated: 0, unchanged: 0, errors: scan.errors };
 
   for (const detected of scan.games) {
     const existing = store.games.find(
-      (g) => g.folder.toLowerCase() === detected.folder.toLowerCase()
+      (g) => normalizeFolderForCompare(g.folder) === normalizeFolderForCompare(detected.folder)
     );
 
     if (!existing) {
