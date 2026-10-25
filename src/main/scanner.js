@@ -319,6 +319,7 @@ function detectGame(folderExt) {
     launch,
     processNames,
     cover: null,
+    coverMode: null,
     favorite: false,
     playtimeSec: 0,
     lastPlayed: null,
@@ -332,7 +333,10 @@ function detectGame(folderExt) {
   // (a mergeScanResults a meglévő játék cover mezőjéhez nem nyúl).
   if (!game.cover) {
     const found = findCoverImage(folderExt);
-    if (found) game.cover = displayPath(found);
+    if (found) {
+      game.cover = displayPath(found);
+      game.coverMode = 'auto';
+    }
   }
 
   return game;
@@ -406,7 +410,10 @@ function mergeScanResults(store, scan) {
       // Az automatikusan talált borítót a covers mappába másoljuk, különben
       // a cover:// protokoll (ami csak a coverDir-ből szolgál ki) nem találná meg.
       const copied = copyCoverToStore(store, detected.cover, detected.id);
-      if (copied) detected.cover = copied;
+      if (copied) {
+        detected.cover = copied;
+        detected.coverMode = 'auto';
+      }
       store.data.games.push(detected);
       summary.added++;
       continue;
@@ -435,6 +442,7 @@ function mergeScanResults(store, scan) {
       const copied = copyCoverToStore(store, detected.cover, existing.id);
       if (copied) {
         existing.cover = copied;
+        existing.coverMode = 'auto';
         changed = true;
       }
     }

@@ -52,6 +52,9 @@ function normalizeGame(raw) {
       ? raw.processNames.map(String).filter(Boolean)
       : [],
     cover: raw.cover ? String(raw.cover) : null,
+    // Ki állította be a borítót: kézi kiválasztás ('manual') vagy automatikus
+    // felismerés ('auto'). A kézi borítót automatikus művelet nem írhatja felül.
+    coverMode: raw.coverMode === 'manual' || raw.coverMode === 'auto' ? raw.coverMode : null,
     favorite: Boolean(raw.favorite),
     playtimeSec: num(raw.playtimeSec),
     lastPlayed: raw.lastPlayed ? num(raw.lastPlayed) : null,
@@ -171,6 +174,10 @@ class LibraryStore {
     }
     if (typeof patch.favorite === 'boolean') game.favorite = patch.favorite;
     if (patch.cover !== undefined) game.cover = patch.cover ? String(patch.cover) : null;
+    if (patch.coverMode !== undefined) {
+      game.coverMode =
+        patch.coverMode === 'manual' || patch.coverMode === 'auto' ? patch.coverMode : null;
+    }
 
     this.scheduleSave();
     return game;

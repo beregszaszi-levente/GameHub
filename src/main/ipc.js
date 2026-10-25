@@ -112,7 +112,10 @@ function registerIpc({ library, getWindow }) {
     if (existing) return { ok: true, id: existing.id, existed: true };
     // A scan-borítót a covers mappába másoljuk, hogy a cover:// protokoll elérje.
     const copied = copyCoverToStore(library, detected.cover, detected.id);
-    if (copied) detected.cover = copied;
+    if (copied) {
+      detected.cover = copied;
+      detected.coverMode = 'auto';
+    }
     library.data.games.push(detected);
     library.saveNow();
     return { ok: true, id: detected.id };
@@ -178,6 +181,7 @@ function registerIpc({ library, getWindow }) {
       launch: { kind: 'exe', path: '', args: [], cwd: folder, elevated: false },
       processNames: [],
       cover: null,
+      coverMode: null,
       favorite: false,
       playtimeSec: 0,
       lastPlayed: null,
@@ -289,6 +293,7 @@ function registerIpc({ library, getWindow }) {
 
     deleteOldCover(game, target);
     game.cover = target;
+    game.coverMode = 'manual';
     library.saveNow();
     broadcast();
     return { ok: true };
@@ -299,6 +304,7 @@ function registerIpc({ library, getWindow }) {
     if (!game) return { ok: false, message: 'Ismeretlen játék.' };
     deleteOldCover(game, null);
     game.cover = null;
+    game.coverMode = null;
     library.saveNow();
     broadcast();
     return { ok: true };
@@ -306,9 +312,16 @@ function registerIpc({ library, getWindow }) {
 
   // Újrakeresi a borítót a játék saját mappájában, és felülírja a korábbi
   // automatikus találatot. A megtalált képet a kezelt covers mappába másoljuk.
+  // A felhasználó kézzel kiválasztott borítóját soha nem írjuk felül.
   ipcMain.handle('cover:rescan', (_event, id) => {
     const game = library.getGame(id);
     if (!game) return { ok: false, message: 'Ismeretlen játék.' };
+    if (game.coverMode === 'manual') {
+      return {
+        ok: false,
+        message: 'Kézzel kiválasztott borítót nem írhatom felül automatikus felismeréssel.'
+      };
+    }
     if (!exists(game.folder)) {
       return { ok: false, message: 'A játék mappája nem érhető el.' };
     }
@@ -325,6 +338,7 @@ function registerIpc({ library, getWindow }) {
 
     deleteOldCover(game, target);
     game.cover = target;
+    game.coverMode = 'auto';
     library.saveNow();
     broadcast();
     return { ok: true };
