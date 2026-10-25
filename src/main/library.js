@@ -14,7 +14,8 @@ function defaultState() {
     settings: {
       libraryRoots: [DEFAULT_ROOT],
       autoScanOnStart: true,
-      skipLauncherFolders: true
+      skipLauncherFolders: true,
+      steamImportPath: null
     },
     games: []
   };
@@ -52,11 +53,14 @@ function normalizeGame(raw) {
       ? raw.processNames.map(String).filter(Boolean)
       : [],
     cover: raw.cover ? String(raw.cover) : null,
+    // Ki állította be a borítót: kézi kiválasztás ('manual') vagy automatikus
+    // felismerés ('auto'). A kézi borítót automatikus művelet nem írhatja felül.
+    coverMode: raw.coverMode === 'manual' || raw.coverMode === 'auto' ? raw.coverMode : null,
     favorite: Boolean(raw.favorite),
     playtimeSec: num(raw.playtimeSec),
     lastPlayed: raw.lastPlayed ? num(raw.lastPlayed) : null,
     addedAt: num(raw.addedAt, Date.now()),
-    source: raw.source === 'manual' ? 'manual' : 'auto',
+    source: raw.source === 'manual' || raw.source === 'steam-import' ? raw.source : 'auto',
     titleLocked: Boolean(raw.titleLocked),
     launchLocked: Boolean(raw.launchLocked)
   };
@@ -79,6 +83,10 @@ function normalizeState(raw) {
   if (typeof settings.skipLauncherFolders === 'boolean') {
     state.settings.skipLauncherFolders = settings.skipLauncherFolders;
   }
+  state.settings.steamImportPath =
+    typeof settings.steamImportPath === 'string' && settings.steamImportPath.trim()
+      ? settings.steamImportPath.trim()
+      : null;
 
   if (Array.isArray(raw.games)) {
     const seen = new Set();
@@ -171,6 +179,10 @@ class LibraryStore {
     }
     if (typeof patch.favorite === 'boolean') game.favorite = patch.favorite;
     if (patch.cover !== undefined) game.cover = patch.cover ? String(patch.cover) : null;
+    if (patch.coverMode !== undefined) {
+      game.coverMode =
+        patch.coverMode === 'manual' || patch.coverMode === 'auto' ? patch.coverMode : null;
+    }
 
     this.scheduleSave();
     return game;
@@ -195,6 +207,10 @@ class LibraryStore {
     }
     if (typeof patch.skipLauncherFolders === 'boolean') {
       this.data.settings.skipLauncherFolders = patch.skipLauncherFolders;
+    }
+    if (patch.steamImportPath === null || typeof patch.steamImportPath === 'string') {
+      const value = patch.steamImportPath === null ? null : patch.steamImportPath.trim();
+      this.data.settings.steamImportPath = value || null;
     }
     this.scheduleSave();
     return this.data.settings;

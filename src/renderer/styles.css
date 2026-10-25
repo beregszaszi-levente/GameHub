@@ -400,6 +400,21 @@ select:focus-visible,
   border-color: rgba(239, 68, 68, 0.55);
 }
 
+.ghost-btn.accent {
+  color: var(--color-secondary);
+  border-color: rgba(139, 92, 246, 0.4);
+}
+
+.ghost-btn.accent:hover {
+  background: rgba(139, 92, 246, 0.14);
+  border-color: rgba(139, 92, 246, 0.65);
+}
+
+.ghost-btn:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
 /* ── Content ────────────────────────────────────────────────────────────── */
 
 .content {
@@ -1196,6 +1211,117 @@ select:focus-visible,
   flex-wrap: wrap;
 }
 
+/* ── Steam import ───────────────────────────────────────────────────────── */
+
+.steam-import-modal {
+  max-width: 700px;
+}
+
+.steam-import-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.steam-import-toolbar .checkbox {
+  font-size: 12.5px;
+}
+
+.steam-import-count {
+  color: var(--color-muted-foreground);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.steam-import-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 46vh;
+  overflow-y: auto;
+  padding-right: 4px;
+  margin-bottom: 8px;
+}
+
+.steam-import-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  transition: background var(--transition-base), border-color var(--transition-base);
+}
+
+.steam-import-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--color-border);
+}
+
+.steam-import-item input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.steam-import-item.is-existing {
+  opacity: 0.62;
+  cursor: default;
+}
+
+.steam-import-item.is-existing:hover {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: var(--color-border-subtle);
+}
+
+.steam-import-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.steam-import-name {
+  color: #e2e8f0;
+  font-size: 13.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.steam-import-path {
+  color: var(--color-muted-foreground);
+  font-size: 11.5px;
+  line-height: 1.4;
+  word-break: break-all;
+}
+
+.steam-import-badge {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  background: rgba(34, 197, 94, 0.12);
+  color: #86efac;
+  font-size: 10.5px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+.steam-import-empty {
+  margin: 26px 0;
+  color: var(--color-muted-foreground);
+  font-size: 13px;
+  text-align: center;
+}
+
 /* ── Toasts ─────────────────────────────────────────────────────────────── */
 
 .toasts {
@@ -1275,6 +1401,8 @@ select:focus-visible,
 
 @media (max-width: 1120px) {
   .sort span { display: none; }
+  #btn-steam-import { width: 40px; padding: 0; }
+  #btn-steam-import .btn-label { display: none; }
   .topbar { padding: 16px 22px; }
   .content { padding: 22px 22px 50px; }
 }

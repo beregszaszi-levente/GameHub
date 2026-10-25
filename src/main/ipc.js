@@ -4,21 +4,80 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { ipcMain, dialog, shell } = require('electron');
 
-const { displayPath, exists, hasInvalidName } = require('./paths');
-const { scanRoots, mergeScanResults, detectGame, cleanTitle } = require('./scanner');
+const { displayPath, exists, hasInvalidName, isDirectory, toExtended } = require('./paths');
+const {
+  scanRoots,
+  mergeScanResults,
+  detectGame,
+  cleanTitle,
+  findCoverImage,
+  copyCoverToStore
+} = require('./scanner');
 const { slugId } = require('./library');
 const { launchGame } = require('./launcher');
 const { renameFolder } = require('./rename');
 const { PlaytimeTracker } = require('./tracker');
+const { findSteamLibraryFolders, scanSteamApps, STEAM_DEFAULT } = require('./steam-import');
 
 const IMAGE_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp']);
 const COVER_SCHEME = 'cover://local/';
 
-/** Két mappaútvonal összehasonlítása fájlrendszeri szintre (kiszűri a \\?\ előtagot és a záró pontot/szóközt). */
+/**
+ * Két mappaútvonal összehasonlítása fájlrendszeri szintre.
+ * Kiszűri a `\\?\` előtagot (a scanner ilyennel menti a mappákat), a záró
+ * elválasztót, valamint a záró pontot/szóközt (a Win32 ezeket lecsípné).
+ */
 function normalizeFolderForCompare(folder) {
   return displayPath(folder)
+    .replace(/[\\/]+$/g, '')
     .replace(/[. ]+$/g, '')
     .toLowerCase();
+}
+
+/** A megadott útvonalból a létező steamapps mappa (könyvtárgyökér vagy steamapps is lehet). */
+function steamAppsFromPath(input) {
+  if (!input) return null;
+  const value = String(input).trim();
+  if (!value) return null;
+
+  if (path.basename(value).toLowerCase() === 'steamapps' && isDirectory(value)) {
+    return value;
+  }
+
+  const candidate = path.join(value, 'steamapps');
+  return isDirectory(candidate) ? candidate : null;
+}
+
+/** Steam könyvtár-gyökér hozzáadása kis-nagybetűtől független duplikációszűréssel. */
+function addSteamRoot(roots, seen, root) {
+  if (!root) return;
+  const key = path.resolve(String(root)).toLowerCase();
+  if (seen.has(key)) return;
+  seen.add(key);
+  roots.push(String(root));
+}
+
+/** Az összes Steam könyvtárból összegyűjti a játékokat, appid szerint dedupálva. */
+function collectSteamGames(roots) {
+  const games = [];
+  const seenAppIds = new Set();
+
+  for (const root of roots) {
+    for (const game of scanSteamApps(root)) {
+      const appid = String(game.appid);
+      if (seenAppIds.has(appid)) continue;
+      seenAppIds.add(appid);
+      games.push({
+        appid,
+        name: game.name,
+        installDir: game.installDir,
+        folder: path.join(root, 'steamapps', 'common', game.installDir)
+      });
+    }
+  }
+
+  games.sort((a, b) => a.name.localeCompare(b.name, 'hu', { sensitivity: 'base' }));
+  return games;
 }
 
 function registerIpc({ library, getWindow }) {
@@ -47,6 +106,13 @@ function registerIpc({ library, getWindow }) {
     } catch {
       return null;
     }
+  }
+
+  /** Igaz, ha a borító a kezelt covers mappában van (a scan-borító a játék mappájában lehet). */
+  function isManagedCover(cover) {
+    if (!cover) return false;
+    const dir = path.resolve(library.coverDir).toLowerCase() + path.sep;
+    return path.resolve(cover).toLowerCase().startsWith(dir);
   }
 
   function publicState() {
@@ -96,6 +162,12 @@ function registerIpc({ library, getWindow }) {
       (g) => normalizeFolderForCompare(g.folder) === normalizeFolderForCompare(detected.folder)
     );
     if (existing) return { ok: true, id: existing.id, existed: true };
+    // A scan-borítót a covers mappába másoljuk, hogy a cover:// protokoll elérje.
+    const copied = copyCoverToStore(library, detected.cover, detected.id);
+    if (copied) {
+      detected.cover = copied;
+      detected.coverMode = 'auto';
+    }
     library.data.games.push(detected);
     library.saveNow();
     return { ok: true, id: detected.id };
@@ -161,6 +233,7 @@ function registerIpc({ library, getWindow }) {
       launch: { kind: 'exe', path: '', args: [], cwd: folder, elevated: false },
       processNames: [],
       cover: null,
+      coverMode: null,
       favorite: false,
       playtimeSec: 0,
       lastPlayed: null,
@@ -177,7 +250,9 @@ function registerIpc({ library, getWindow }) {
   ipcMain.handle('game:remove', (_event, id) => {
     const game = library.getGame(id);
     if (!game) return { ok: false, message: 'Ismeretlen játék.' };
-    if (game.cover) {
+    // Csak a kezelt covers mappában lévő borítót töröljük; a scan által
+    // felismert kép a játék saját mappájában van, azt nem szabad törölni.
+    if (isManagedCover(game.cover)) {
       try {
         fs.unlinkSync(game.cover);
       } catch {
@@ -235,13 +310,11 @@ function registerIpc({ library, getWindow }) {
   // --- borítók ------------------------------------------------------------
   function deleteOldCover(game, keep) {
     if (!game.cover || game.cover === keep) return;
-    const dir = path.resolve(library.coverDir).toLowerCase();
-    if (path.resolve(game.cover).toLowerCase().startsWith(dir)) {
-      try {
-        fs.unlinkSync(game.cover);
-      } catch {
-        /* ignore */
-      }
+    if (!isManagedCover(game.cover)) return;
+    try {
+      fs.unlinkSync(game.cover);
+    } catch {
+      /* ignore */
     }
   }
 
@@ -272,6 +345,7 @@ function registerIpc({ library, getWindow }) {
 
     deleteOldCover(game, target);
     game.cover = target;
+    game.coverMode = 'manual';
     library.saveNow();
     broadcast();
     return { ok: true };
@@ -282,6 +356,41 @@ function registerIpc({ library, getWindow }) {
     if (!game) return { ok: false, message: 'Ismeretlen játék.' };
     deleteOldCover(game, null);
     game.cover = null;
+    game.coverMode = null;
+    library.saveNow();
+    broadcast();
+    return { ok: true };
+  });
+
+  // Újrakeresi a borítót a játék saját mappájában, és felülírja a korábbi
+  // automatikus találatot. A megtalált képet a kezelt covers mappába másoljuk.
+  // A felhasználó kézzel kiválasztott borítóját soha nem írjuk felül.
+  ipcMain.handle('cover:rescan', (_event, id) => {
+    const game = library.getGame(id);
+    if (!game) return { ok: false, message: 'Ismeretlen játék.' };
+    if (game.coverMode === 'manual') {
+      return {
+        ok: false,
+        message: 'Kézzel kiválasztott borítót nem írhatom felül automatikus felismeréssel.'
+      };
+    }
+    if (!exists(game.folder)) {
+      return { ok: false, message: 'A játék mappája nem érhető el.' };
+    }
+
+    const found = findCoverImage(toExtended(game.folder));
+    if (!found) {
+      return { ok: false, message: 'Nem találtam borítóképet a játék mappájában.' };
+    }
+
+    const target = copyCoverToStore(library, displayPath(found), game.id);
+    if (!target) {
+      return { ok: false, message: 'Nem sikerült bemásolni a megtalált képet.' };
+    }
+
+    deleteOldCover(game, target);
+    game.cover = target;
+    game.coverMode = 'auto';
     library.saveNow();
     broadcast();
     return { ok: true };
@@ -325,6 +434,114 @@ function registerIpc({ library, getWindow }) {
     library.saveNow();
     broadcast();
     return { ok: true };
+  });
+
+  // --- Steam import -------------------------------------------------------
+  ipcMain.handle('steam:import', () => {
+    try {
+      const roots = [];
+      const seenRoots = new Set();
+
+      // Először az elmentett steamapps útvonalat próbáljuk. Az ott lévő
+      // libraryfolders.vdf-ből az összes Steam könyvtár kiolvasható.
+      const savedApps = steamAppsFromPath(library.settings.steamImportPath);
+      if (savedApps) {
+        addSteamRoot(roots, seenRoots, path.dirname(savedApps));
+        const savedFolders = findSteamLibraryFolders(savedApps);
+        if (savedFolders) {
+          for (const folder of savedFolders) addSteamRoot(roots, seenRoots, folder);
+        }
+      }
+
+      // Ha nincs elmentett útvonal, az alapértelmezett Steam telepítést keressük.
+      if (!roots.length) {
+        const detected = findSteamLibraryFolders(STEAM_DEFAULT);
+        if (detected) {
+          for (const folder of detected) addSteamRoot(roots, seenRoots, folder);
+        }
+      }
+
+      if (!roots.length) {
+        return {
+          ok: false,
+          needsManualPath: true,
+          message: 'A Steam nem található az alapértelmezett helyen.'
+        };
+      }
+
+      return { ok: true, games: collectSteamGames(roots), steamRoot: roots[0] };
+    } catch (err) {
+      return { ok: false, message: `Steam import hiba: ${err.message}` };
+    }
+  });
+
+  ipcMain.handle('steam:importRoot', (_event, root) => {
+    const steamapps = steamAppsFromPath(root);
+    if (!steamapps) {
+      return {
+        ok: false,
+        message:
+          'A kiválasztott mappában nem található steamapps mappa. Válaszd a Steam ' +
+          'telepítésén belüli steamapps mappát.'
+      };
+    }
+    library.setSettings({ steamImportPath: steamapps });
+    library.saveNow();
+    broadcast();
+    return { ok: true, path: steamapps };
+  });
+
+  ipcMain.handle('steam:addGames', (_event, items) => {
+    if (!Array.isArray(items)) return { ok: false, message: 'Érvénytelen import lista.' };
+
+    const now = Date.now();
+    // A scan `\\?\` előtaggal menti a mappákat, a Steam import viszont sima
+    // útvonalat ad. Csak normalizált alakon szabad összehasonlítani, különben
+    // a LibraryStore.addGame azonos id-n felülírná a meglévő játékot.
+    const existingFolders = new Set(
+      library.games.map((game) => normalizeFolderForCompare(game.folder))
+    );
+    let added = 0;
+    let skipped = 0;
+
+    for (const item of items) {
+      const title = String(item?.name ?? item?.title ?? '').trim();
+      const folder = String(item?.folder ?? '').trim();
+      const key = normalizeFolderForCompare(folder);
+
+      if (!title || !folder || !path.win32.isAbsolute(folder) || existingFolders.has(key)) {
+        skipped++;
+        continue;
+      }
+
+      const created = library.addGame({
+        title,
+        folder,
+        launch: { kind: 'exe', path: '', args: [], cwd: folder, elevated: false },
+        processNames: [],
+        cover: null,
+        coverMode: null,
+        favorite: false,
+        playtimeSec: 0,
+        lastPlayed: null,
+        addedAt: now,
+        source: 'steam-import',
+        titleLocked: false,
+        launchLocked: false
+      });
+
+      if (!created) {
+        skipped++;
+        continue;
+      }
+
+      existingFolders.add(key);
+      added++;
+    }
+
+    library.saveNow();
+    broadcast();
+    return { ok: true, added, skipped };
   });
 
   ipcMain.handle('dialog:pickExe', async () => {

@@ -1,0 +1,22 @@
+# Review package: ce0ce9d..aa62426
+
+## Commits
+aa62426 fix: Steam import ne írja felül a \\?\ előtaggal mentett meglévő játékot
+
+## Files changed
+ scripts/test-steam-import-ipc.js | 54 +++++++++++++++++++++++++++++++++++++++-
+ src/main/ipc.js                  | 14 ++++++++---
+ src/renderer/app.js              | 16 ++++++++++--
+
+## Diff
+
+### src/main/ipc.js
+- `normalizeFolderForCompare` now also strips trailing slashes (`[\\/]+$`) in addition to trailing dots/spaces and lowercasing.
+- `steam:addGames` builds `existingFolders` using `normalizeFolderForCompare(game.folder)` and compares `normalizeFolderForCompare(folder)`, so extended-prefix (`\\?\`) folders match plain paths.
+
+### src/renderer/app.js
+- `folderKey()` strips `\\?\` prefix (handles both `\\?\UNC\` and `\\?\` forms) plus trailing slashes/dots/spaces before lowercasing.
+- `renderSteamImport` uses `game.folderDisplay || game.folder` for existing-key lookup (folderDisplay already strips `\\?\` via `displayPath` in ipc.js publicState).
+
+### scripts/test-steam-import-ipc.js
+- New regression test: an existing game with `\\?\` prefixed folder is skipped (not re-added) by `steam:addGames`; its title/source/launch/cover/coverMode/favorite/processNames remain untouched; count unchanged.

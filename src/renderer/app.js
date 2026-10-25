@@ -12,7 +12,8 @@ const state = {
   query: '',
   sort: 'name',
   detailId: null,
-  editorId: null
+  editorId: null,
+  steamGames: []
 };
 
 const el = (id) => document.getElementById(id);
@@ -454,12 +455,163 @@ function renderSettings() {
   el('settings-datadir').textContent = state.data.dataDir || '';
 }
 
+/* ---------------------------- steam import ------------------------------ */
+
+/**
+ * Mappa-összehasonlító kulcs a felülethez. A scanner `\\?\` előtaggal menti a
+ * mappákat, ezért a prefixet, a záró elválasztót és a záró pontot/szóközt is
+ * le kell vágni, különben a már meglévő játék "újként" jelenne meg.
+ */
+function folderKey(folder) {
+  let value = String(folder || '');
+  if (value.startsWith('\\\\?\\UNC\\')) {
+    value = `\\\\${value.slice(8)}`;
+  } else if (value.startsWith('\\\\?\\')) {
+    value = value.slice(4);
+  }
+  return value
+    .replace(/[\\/]+$/g, '')
+    .replace(/[. ]+$/g, '')
+    .toLowerCase();
+}
+
+function updateSteamImportSelection() {
+  const boxes = [
+    ...el('steam-import-list').querySelectorAll('input[data-appid]:not(:disabled)')
+  ];
+  const checked = boxes.filter((box) => box.checked);
+  const selectAll = el('steam-import-all');
+
+  selectAll.disabled = boxes.length === 0;
+  selectAll.checked = boxes.length > 0 && checked.length === boxes.length;
+  selectAll.indeterminate = checked.length > 0 && checked.length < boxes.length;
+
+  el('steam-import-count').textContent = `${checked.length} / ${boxes.length} kiválasztva`;
+
+  const add = el('steam-import-add');
+  add.disabled = checked.length === 0;
+  add.textContent = checked.length
+    ? `Kijelölt hozzáadása (${checked.length})`
+    : 'Kijelölt hozzáadása';
+}
+
+function renderSteamImport(result) {
+  state.steamGames = result.games;
+  const existingKeys = new Set(games().map((game) => folderKey(game.folderDisplay || game.folder)));
+  const existingCount = result.games.filter((game) =>
+    existingKeys.has(folderKey(game.folder))
+  ).length;
+
+  el('steam-import-sub').textContent = result.steamRoot
+    ? `Steam könyvtár: ${result.steamRoot}. Válaszd ki, mely játékokat vedd fel; ` +
+      'az indítót később a szerkesztőben állíthatod be.'
+    : 'Válaszd ki, mely Steam játékokat vedd fel a könyvtárba.';
+
+  el('steam-import-list').innerHTML = result.games.length
+    ? result.games
+        .map((game) => {
+          const existing = existingKeys.has(folderKey(game.folder));
+          return `
+      <label class="steam-import-item ${existing ? 'is-existing' : ''}">
+        <input type="checkbox" data-appid="${esc(game.appid)}" ${existing ? 'disabled' : ''} />
+        <span class="steam-import-info">
+          <span class="steam-import-name">${esc(game.name)}</span>
+          <span class="steam-import-path">${esc(game.folder)}</span>
+        </span>
+        ${existing ? '<span class="steam-import-badge">már a könyvtárban</span>' : ''}
+      </label>`;
+        })
+        .join('')
+    : '<p class="steam-import-empty">Nem találtam importálható Steam játékot.</p>';
+
+  updateSteamImportSelection();
+
+  if (result.games.length && existingCount === result.games.length) {
+    el('steam-import-count').textContent = 'Minden megtalált játék már a könyvtárban van.';
+  }
+}
+
+async function openSteamImport(button) {
+  if (button) button.disabled = true;
+  try {
+    let result = await api.steamImport();
+
+    // Ha a Steam nincs az alapértelmezett helyen, a felhasználó kiválaszthatja
+    // a steamapps mappát; a sikeres útvonalat elmentjük és újrapróbáljuk.
+    if (!result.ok && result.needsManualPath) {
+      toast(
+        'Nem találtam a Steamöt az alapértelmezett helyen. Válaszd ki a Steam steamapps mappáját.',
+        'info'
+      );
+      const picked = await api.pickDirectory();
+      if (!picked.ok) return;
+
+      const saved = await api.steamImportRoot(picked.path);
+      if (!saved.ok) {
+        toast(saved.message || 'Nem sikerült elmenteni a Steam útvonalat.', 'error');
+        return;
+      }
+
+      result = await api.steamImport();
+    }
+
+    if (!result.ok) {
+      toast(result.message || 'Steam import hiba.', 'error');
+      return;
+    }
+
+    renderSteamImport(result);
+    el('steam-import').classList.remove('hidden');
+  } catch (err) {
+    toast(`Steam import hiba: ${err?.message || err}`, 'error');
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+async function addSteamSelection(button) {
+  const selected = [
+    ...el('steam-import-list').querySelectorAll('input[data-appid]:checked')
+  ]
+    .map((input) => state.steamGames.find((game) => game.appid === input.dataset.appid))
+    .filter(Boolean);
+
+  if (!selected.length) return;
+  if (button) button.disabled = true;
+
+  try {
+    const result = await api.steamAddGames(selected);
+    if (!result.ok) {
+      toast(result.message || 'Nem sikerült hozzáadni a kijelölt játékokat.', 'error');
+      return;
+    }
+
+    await refreshState();
+    render();
+    closeOverlay('steam-import');
+
+    if (!result.added) {
+      toast('A kijelölt játékok már szerepelnek a könyvtárban.', 'info');
+      return;
+    }
+
+    const parts = [`${result.added} játék hozzáadva`];
+    if (result.skipped) parts.push(`${result.skipped} kihagyva`);
+    toast(`${parts.join(', ')}. Az indítót a szerkesztőben állíthatod be.`, 'success');
+  } catch (err) {
+    toast(`Import hiba: ${err?.message || err}`, 'error');
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
 /* ---------------------------- overlays ---------------------------------- */
 
 function closeOverlay(name) {
   el(name).classList.add('hidden');
   if (name === 'detail') state.detailId = null;
   if (name === 'editor') state.editorId = null;
+  if (name === 'steam-import') state.steamGames = [];
   if (name === 'settings') render();
 }
 
@@ -566,6 +718,9 @@ function bind() {
   el('empty-scan').addEventListener('click', (event) => rescan(event.currentTarget));
   el('btn-add').addEventListener('click', addGame);
   el('empty-add').addEventListener('click', addGame);
+  el('btn-steam-import').addEventListener('click', (event) =>
+    openSteamImport(event.currentTarget)
+  );
   el('btn-settings').addEventListener('click', () => {
     renderSettings();
     el('settings').classList.remove('hidden');
@@ -690,6 +845,27 @@ function bind() {
     if (game) updateCoverPreview(game);
     render();
   });
+  el('btn-cover-rescan').addEventListener('click', async (event) => {
+    if (!state.editorId) return;
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const result = await api.rescanCover(state.editorId);
+      if (!result.ok) {
+        toast(result.message || 'Nem találtam borítót a játék mappájában.', 'error');
+        return;
+      }
+      await refreshState();
+      const game = gameById(state.editorId);
+      if (game) updateCoverPreview(game);
+      render();
+      toast('Borító frissítve a játék mappájából.', 'success');
+    } catch (err) {
+      toast(`Borítókeresési hiba: ${err.message}`, 'error');
+    } finally {
+      button.disabled = false;
+    }
+  });
 
   // Beállítások
   el('btn-add-root').addEventListener('click', async () => {
@@ -736,6 +912,21 @@ function bind() {
     const result = await api.openDataFolder();
     if (!result.ok) toast(result.message || 'Nem sikerült megnyitni.', 'error');
   });
+
+  // Steam import
+  el('steam-import-list').addEventListener('change', updateSteamImportSelection);
+  el('steam-import-all').addEventListener('change', (event) => {
+    const boxes = [
+      ...el('steam-import-list').querySelectorAll('input[data-appid]:not(:disabled)')
+    ];
+    boxes.forEach((box) => {
+      box.checked = event.target.checked;
+    });
+    updateSteamImportSelection();
+  });
+  el('steam-import-add').addEventListener('click', (event) =>
+    addSteamSelection(event.currentTarget)
+  );
 
   // Billentyűk
   document.addEventListener('keydown', (event) => {

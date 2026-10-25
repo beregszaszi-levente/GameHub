@@ -1,0 +1,791 @@
+# Review package: c274407..4b032a7
+
+## Commits
+4b032a7 fix: kézzel beállított borító védelme az újrakikeresésnél (coverMode)
+
+## Files changed
+ scripts/test-scan.js | 223 ++++++++++++++++++++++++++++++++++++++++++++++++++-
+ src/main/ipc.js      |  16 +++-
+ src/main/library.js  |   7 ++
+ src/main/scanner.js  |  12 ++-
+ 4 files changed, 253 insertions(+), 5 deletions(-)
+
+## Diff
+diff --git a/scripts/test-scan.js b/scripts/test-scan.js
+index 402d584..b7c760b 100644
+--- a/scripts/test-scan.js
++++ b/scripts/test-scan.js
+@@ -118,24 +118,25 @@ withTempGame([], (dir) => {
+   const game = detectGame(toExtended(dir));
+   assert.ok(game, 'detectGame nem adott vissza játékot');
+   assert.strictEqual(game.cover, null, 'kép nélkül a borító null');
+   checks++;
+ });
+
+ // 4. A scan nem írhatja felül a felhasználó által beállított borítót.
+ withTempGame(['folder.jpg'], (dir) => {
+   const detected = detectGame(toExtended(dir));
+   const manualCover = path.join(dir, 'manual.jpg');
+-  const existing = { ...detected, cover: manualCover };
++  const existing = { ...detected, cover: manualCover, coverMode: 'manual' };
+   const store = { games: [existing], data: { games: [] }, scheduleSave() {} };
+   mergeScanResults(store, { games: [detected], errors: [] });
+   assert.strictEqual(existing.cover, manualCover, 'a kézi borító nem íródhat felül');
++  assert.strictEqual(existing.coverMode, 'manual', 'a kézi borító jelölése maradjon manual');
+   checks++;
+ });
+
+ // 5. Új játéknál a borító a covers mappába kerül (a cover:// protokoll miatt).
+ withTempGame(['folder.jpg'], (dir) => {
+   const detected = detectGame(toExtended(dir));
+   withTempCoverDir((coverDir) => {
+     const store = { games: [], data: { games: [] }, coverDir, scheduleSave() {} };
+     mergeScanResults(store, { games: [detected], errors: [] });
+     const saved = store.data.games[0];
+     assert.ok(saved, 'a játéknak be kell kerülnie a könyvtárba');
+     assert.ok(
+       displayPath(saved.cover || '')
+         .toLowerCase()
+         .startsWith(coverDir.toLowerCase()),
+       'a borítónak a covers mappába kell kerülnie'
+     );
+     assert.strictEqual(
+       fs.readFileSync(saved.cover, 'utf8'),
+       'fake-image',
+       'a másolat tartalma egyezzen'
+     );
++    assert.strictEqual(saved.coverMode, 'auto', 'az automatikus borító jelölése auto');
+     assert.ok(fs.existsSync(path.join(dir, 'folder.jpg')), 'a forrásképet meg kell hagyni');
+   });
+   checks++;
+ });
+
+ // 6. Re-scan: a meglévő, borító nélküli játék is megkapja a felismert borítót.
+ withTempGame(['folder.jpg'], (dir) => {
+   const detected = detectGame(toExtended(dir));
+   withTempCoverDir((coverDir) => {
+     const existing = { ...detected, cover: null };
+     const store = { games: [existing], data: { games: [existing] }, coverDir, scheduleSave() {} };
+     const summary = mergeScanResults(store, { games: [detected], errors: [] });
+     assert.strictEqual(summary.updated, 1, 'a borító pótlása frissítésnek számít');
+     assert.ok(
+       displayPath(existing.cover || '')
+         .toLowerCase()
+         .startsWith(coverDir.toLowerCase()),
+       'a meglévő játék borítóját is a covers mappába kell másolni'
+     );
+     assert.strictEqual(fs.readFileSync(existing.cover, 'utf8'), 'fake-image');
++    assert.strictEqual(existing.coverMode, 'auto', 'a pótolt borító jelölése auto');
+   });
+   checks++;
+ });
+
+ // 7. A cover:rescan alapja: findCoverImage az adott játék mappájában keres,
+ //    prioritás szerint, és a talált kép a covers mappába másolható.
+ withTempGame(['banner.jpg', 'folder.jpg'], (dir) => {
+   const found = findCoverImage(toExtended(dir));
+   assert.ok(found, 'findCoverImage nem talált képet');
+   assert.strictEqual(
+     displayPath(found),
+     displayPath(path.join(dir, 'folder.jpg')),
+     'a prioritási sorrend élén a folder.jpg áll'
+   );
+
+   withTempCoverDir((coverDir) => {
+     const copied = copyCoverToStore({ coverDir }, displayPath(found), 'rescan-game');
+     assert.ok(copied, 'copyCoverToStore nem adott vissza útvonalat');
+     assert.ok(
+       displayPath(copied).toLowerCase().startsWith(coverDir.toLowerCase()),
+       'az új borítónak a covers mappába kell kerülnie'
+     );
+     assert.strictEqual(fs.readFileSync(copied, 'utf8'), 'fake-image');
+     assert.ok(fs.existsSync(path.join(dir, 'folder.jpg')), 'a forrásképet meg kell hagyni');
+   });
+   checks++;
+ });
+
+ // 8. Kép nélküli (vagy nem létező) mappában a rescan nem talál borítót.
+ withTempGame([], (dir) => {
+   assert.strictEqual(findCoverImage(toExtended(dir)), null, 'kép nélkül nincs találat');
+   const missing = path.join(dir, 'nincs-ilyen-mappa');
+   assert.strictEqual(findCoverImage(toExtended(missing)), null, 'nem létező mappára sincs találat');
+   checks++;
+ });
+
+-console.log(`Borító-tesztek: ${checks}/${checks} sikeres`);
++/* ------------------------------------------------------------------ *
++ * coverMode és cover:rescan védelem tesztjei
++ * ------------------------------------------------------------------ */
++
++const { LibraryStore, normalizeGame } = require('../src/main/library');
++
++// 9. normalizeGame: a coverMode csak manual/auto lehet, egyébként null.
++assert.strictEqual(normalizeGame({ folder: 'C:\\Games\\A' }).coverMode, null);
++assert.strictEqual(normalizeGame({ folder: 'C:\\Games\\A', coverMode: 'manual' }).coverMode, 'manual');
++assert.strictEqual(normalizeGame({ folder: 'C:\\Games\\A', coverMode: 'auto' }).coverMode, 'auto');
++assert.strictEqual(normalizeGame({ folder: 'C:\\Games\\A', coverMode: 'bogus' }).coverMode, null);
++checks++;
++
++// 10. A coverMode átmegy az updateGame-en, és túléli a library.json körbeírást.
++const libDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gh-lib-test-'));
++try {
++  const store = new LibraryStore(libDir);
++  const added = store.addGame({ folder: 'C:\\Games\\CoverModeTest', coverMode: 'manual' });
++  assert.ok(added, 'a játék hozzáadása sikerült');
++  assert.strictEqual(store.getGame(added.id).coverMode, 'manual');
++
++  store.updateGame(added.id, { coverMode: 'auto' });
++  assert.strictEqual(store.getGame(added.id).coverMode, 'auto');
++  store.saveNow();
++
++  const raw = JSON.parse(fs.readFileSync(store.file, 'utf8'));
++  assert.strictEqual(raw.games[0].coverMode, 'auto', 'a coverMode-nak a fájlban kell lennie');
++
++  const reloaded = new LibraryStore(libDir);
++  reloaded.load();
++  assert.strictEqual(reloaded.getGame(added.id).coverMode, 'auto', 'betöltés után is megmarad');
++} finally {
++  fs.rmSync(libDir, { recursive: true, force: true });
++}
++checks++;
++
++/* ------------------------------------------------------------------ *
++ * cover:rescan / cover:pick / cover:reset IPC tesztek
++ * (az electron modult minimális stubbal helyettesítjük)
++ * ------------------------------------------------------------------ */
++
++const Module = require('node:module');
++const handlers = new Map();
++let dialogResult = null;
++
++const originalLoad = Module._load;
++Module._load = function (request, parent, isMain) {
++  if (request === 'electron') {
++    return {
++      ipcMain: { handle: (channel, fn) => handlers.set(channel, fn) },
++      dialog: { showOpenDialog: async () => dialogResult },
++      shell: { openPath: async () => '' }
++    };
++  }
++  return originalLoad.call(this, request, parent, isMain);
++};
++let ipcModule;
++try {
++  ipcModule = require('../src/main/ipc');
++} finally {
++  Module._load = originalLoad;
++}
++
++function makeFakeLibrary(coverDir, games) {
++  return {
++    dataDir: path.dirname(coverDir),
++    coverDir,
++    games,
++    data: { games },
++    settings: { libraryRoots: [], autoScanOnStart: false },
++    getGame(id) {
++      return games.find((g) => g.id === id) || null;
++    },
++    saveNow() {},
++    scheduleSave() {},
++    setSettings() {},
++    touchLastPlayed() {},
++    addPlaytime() {}
++  };
++}
++
++async function withIpc(coverDir, games, fn) {
++  const library = makeFakeLibrary(coverDir, games);
++  const runtime = ipcModule.registerIpc({ library, getWindow: () => null });
++  try {
++    return await fn(library);
++  } finally {
++    runtime.stop();
++  }
++}
++
++function invoke(channel, ...args) {
++  const handler = handlers.get(channel);
++  assert.ok(handler, `${channel} nincs regisztrálva`);
++  return handler(null, ...args);
++}
++
++function makeGame(id, folder, cover, coverMode) {
++  return {
++    id,
++    title: id,
++    folder,
++    launch: {
++      kind: 'exe',
++      path: path.join(folder, 'bin', 'game.exe'),
++      args: [],
++      cwd: folder,
++      elevated: false
++    },
++    processNames: ['game.exe'],
++    cover,
++    coverMode,
++    favorite: false,
++    playtimeSec: 0,
++    lastPlayed: null,
++    addedAt: Date.now(),
++    source: 'manual'
++  };
++}
++
++async function withTempGameAsync(images, fn) {
++  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gh-cover-ipc-'));
++  try {
++    fs.mkdirSync(path.join(dir, 'bin'), { recursive: true });
++    fs.writeFileSync(path.join(dir, 'bin', 'game.exe'), '');
++    for (const image of images) fs.writeFileSync(path.join(dir, image), 'fake-image');
++    return await fn(dir);
++  } finally {
++    fs.rmSync(dir, { recursive: true, force: true });
++  }
++}
++
++async function withTempCoverDirAsync(fn) {
++  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gh-covers-ipc-'));
++  try {
++    return await fn(dir);
++  } finally {
++    fs.rmSync(dir, { recursive: true, force: true });
++  }
++}
++
++(async () => {
++  try {
++    // 11. Kézzel kiválasztott borítót a cover:rescan nem ír felül.
++    await withTempGameAsync(['folder.jpg'], async (gameDir) => {
++      await withTempCoverDirAsync(async (coverDir) => {
++        const manualCover = path.join(coverDir, 'manual-old.jpg');
++        fs.writeFileSync(manualCover, 'manual-image');
++        const games = [makeGame('manual-game', gameDir, manualCover, 'manual')];
++        await withIpc(coverDir, games, async () => {
++          const result = await invoke('cover:rescan', 'manual-game');
++          assert.strictEqual(result.ok, false, 'kézi borítónál a rescan nem sikerülhet');
++          assert.strictEqual(
++            result.message,
++            'Kézzel kiválasztott borítót nem írhatom felül automatikus felismeréssel.'
++          );
++          assert.strictEqual(games[0].cover, manualCover, 'a kézi borító útvonala ne változzon');
++          assert.strictEqual(games[0].coverMode, 'manual', 'a jelölés maradjon manual');
++          assert.ok(fs.existsSync(manualCover), 'a kézi borító fájlja maradjon meg');
++        });
++      });
++    });
++    checks++;
++
++    // 12. Automatikus borítót a cover:rescan felülír, és auto-ra állítja a jelölést.
++    await withTempGameAsync(['folder.jpg'], async (gameDir) => {
++      await withTempCoverDirAsync(async (coverDir) => {
++        const oldAuto = path.join(coverDir, 'auto-old.jpg');
++        fs.writeFileSync(oldAuto, 'old-auto');
++        const games = [makeGame('auto-game', gameDir, oldAuto, 'auto')];
++        await withIpc(coverDir, games, async () => {
++          const result = await invoke('cover:rescan', 'auto-game');
++          assert.strictEqual(result.ok, true, 'automatikus borítónál a rescan sikerüljön');
++          assert.notStrictEqual(games[0].cover, oldAuto, 'a régi borítót le kell cserélni');
++          assert.ok(
++            displayPath(games[0].cover).toLowerCase().startsWith(coverDir.toLowerCase()),
++            'az új borító a covers mappába kerüljön'
++          );
++          assert.strictEqual(games[0].coverMode, 'auto', 'az új jelölés auto');
++          assert.strictEqual(fs.readFileSync(games[0].cover, 'utf8'), 'fake-image');
++          assert.ok(!fs.existsSync(oldAuto), 'a régi kezelt borítót törölni kell');
++          assert.ok(
++            fs.existsSync(path.join(gameDir, 'folder.jpg')),
++            'a forrásképet meg kell hagyni'
++          );
++        });
++      });
++    });
++    checks++;
++
++    // 13. cover:pick manual-ra, cover:reset null-ra állítja a coverMode-ot.
++    await withTempGameAsync(['folder.jpg'], async (gameDir) => {
++      await withTempCoverDirAsync(async (coverDir) => {
++        const games = [makeGame('pick-game', gameDir, null, null)];
++        await withIpc(coverDir, games, async () => {
++          dialogResult = { canceled: false, filePaths: [path.join(gameDir, 'folder.jpg')] };
++
++          const picked = await invoke('cover:pick', 'pick-game');
++          assert.strictEqual(picked.ok, true, 'a kézi borító kiválasztása sikerüljön');
++          assert.strictEqual(games[0].coverMode, 'manual', 'a kézi választás manual jelölést kap');
++          assert.ok(games[0].cover, 'a borító beállítódik');
++
++          const reset = await invoke('cover:reset', 'pick-game');
++          assert.strictEqual(reset.ok, true);
++          assert.strictEqual(games[0].cover, null, 'reset után nincs borító');
++          assert.strictEqual(games[0].coverMode, null, 'reset után nincs coverMode');
++        });
++      });
++    });
++    checks++;
++
++    console.log(`Borító-tesztek: ${checks}/${checks} sikeres`);
++  } catch (err) {
++    console.error('Borító-teszt hiba:', err.message);
++    process.exitCode = 1;
++  }
++})();
+diff --git a/src/main/ipc.js b/src/main/ipc.js
+index ff1ffe8..60cc468 100644
+--- a/src/main/ipc.js
++++ src/main/ipc.js
+@@ -105,21 +105,24 @@ function registerIpc({ library, getWindow }) {
+     return summary;
+   }
+
+   function addFromDetection(detected) {
+     const existing = library.games.find(
+       (g) => normalizeFolderForCompare(g.folder) === normalizeFolderForCompare(detected.folder)
+     );
+     if (existing) return { ok: true, id: existing.id, existed: true };
+     // A scan-borítót a covers mappába másoljuk, hogy a cover:// protokoll elérje.
+     const copied = copyCoverToStore(library, detected.cover, detected.id);
+-    if (copied) detected.cover = copied;
++    if (copied) {
++      detected.cover = copied;
++      detected.coverMode = 'auto';
++    }
+     library.data.games.push(detected);
+     library.saveNow();
+     return { ok: true, id: detected.id };
+   }
+
+   // --- állapot ------------------------------------------------------------
+   ipcMain.handle('state:get', () => publicState());
+
+   ipcMain.handle('library:scan', () => {
+     const summary = scanAndMerge();
+     broadcast();
+     return { ok: true, ...summary };
+   });
+
+   // --- játék indítás ------------------------------------------------------
+   ipcMain.handle('game:launch', async (_event, id) => {
+     const game = library.getGame(id);
+     if (!game) return { ok: false, message: 'Ez a játék már nem szerepel a listában.' };
+     if (tracker.isRunning(id)) return { ok: true, alreadyRunning: true };
+
+     const result = await launchGame(game);
+     if (result.ok) {
+       tracker.watch(id, game.processNames);
+       library.touchLastPlayed(id);
+       library.scheduleSave();
+       broadcast();
+     }
+     return result;
+   });
+
+   // --- szerkesztés --------------------------------------------------------
+   ipcMain.handle('game:update', (_event, id, patch) => {
+     const updated = library.updateGame(id, patch || {});
+     if (!updated) return { ok: false, message: 'Ismeretlen játék.' };
+     library.saveNow();
+     broadcast();
+     return { ok: true };
+   });
+
+   ipcMain.handle('game:addFromFolder', async () => {
+     const result = await dialog.showOpenDialog(Window(), {
+       title: 'Játék mappa kiválasztása',
+       properties: ['openDirectory']
+     });
+     if (result.canceled || !result.filePaths.length) return { ok: false, canceled: true };
+
+     const folder = result.filePaths[0];
+     const detected = detectGame(folder);
+
+     if (detected) {
+       const added = addFromDetection(detected);
+       broadcast();
+       return { ...added, detected: true };
+     }
+
+     // Nincs automatikus találat: vegyük fel üresen, a szerkesztőben beállítható.
+     const id = slugId(folder);
+     const now = Date.now();
+     library.data.games.push({
+       id,
+       title: cleanTitle(path.basename(folder)) || path.basename(folder),
+       folder,
+       launch: { kind: 'exe', path: '', args: [], cwd: folder, elevated: false },
+       processNames: [],
+       cover: null,
++      coverMode: null,
+       favorite: false,
+       playtimeSec: 0,
+       lastPlayed: null,
+       addedAt: now,
+       source: 'manual',
+       titleLocked: false,
+       launchLocked: false
+     });
+     library.saveNow();
+     broadcast();
+     return { ok: true, id, needsManual: true };
+   });
+
+   ipcMain.handle('game:remove', (_event, id) => {
+     const game = library.getGame(id);
+     if (!game) return { ok: false, message: 'Ismeretlen játék.' };
+     // Csak a kezelt covers mappában lévő borítót töröljük; a scan által
+     // felismert kép a játék saját mappájában van, azt nem szabad törölni.
+     if (isManagedCover(game.cover)) {
+       try {
+         fs.unlinkSync(game.cover);
+       } catch {
+         /* a borító törlése nem kritikus */
+       }
+     }
+     library.removeGame(id);
+     library.saveNow();
+     broadcast();
+     return { ok: true };
+   });
+
+   ipcMain.handle('game:fixFolderName', (_event, id) => {
+     const game = library.getGame(id);
+     if (!game) return { ok: false, message: 'Ismeretlen játék.' };
+
+     const current = displayPath(game.folder);
+     const result = renameFolder(current);
+     if (!result.ok) return result;
+
+     const replace = (value) => {
+       if (!value) return value;
+       const shown = displayPath(value);
+       if (shown.toLowerCase().startsWith(current.toLowerCase())) {
+         return result.to + shown.slice(current.length);
+       }
+       return shown;
+     };
+
+     game.folder = result.to;
+     game.launch.path = replace(game.launch.path);
+     game.launch.cwd = replace(game.launch.cwd);
+     library.saveNow();
+     scanAndMerge();
+     broadcast();
+     return { ok: true, folder: result.to, from: result.from };
+   });
+
+   ipcMain.handle('game:openFolder', async (_event, id) => {
+     const game = library.getGame(id);
+     if (!game) return { ok: false, message: 'Ismeretlen játék.' };
+     if (exists(game.folder)) {
+       const error = await shell.openPath(displayPath(game.folder));
+       if (!error) return { ok: true };
+       // Ha az Explorer nem boldogul a mappával, nyissuk a szülőt.
+     }
+     const parent = path.win32.dirname(displayPath(game.folder));
+     if (exists(parent)) {
+       await shell.openPath(parent);
+       return { ok: true, note: 'A mappa neve miatt a szülő könyvtárat nyitottam meg.' };
+     }
+     return { ok: false, message: 'A mappa nem érhető el.' };
+   });
+
+   // --- borítók ------------------------------------------------------------
+   function deleteOldCover(game, keep) {
+     if (!game.cover || game.cover === keep) return;
+     if (!isManagedCover(game.cover)) return;
+     try {
+       fs.unlinkSync(game.cover);
+     } catch {
+       /* ignore */
+     }
+   }
+
+   ipcMain.handle('cover:pick', async (_event, id) => {
+     const game = library.getGame(id);
+     if (!game) return { ok: false, message: 'Ismeretlen játék.' };
+
+     const result = await dialog.showOpenDialog(Window(), {
+       title: 'Borítókép kiválasztása',
+       properties: ['openFile'],
+       filters: [{ name: 'Képek', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'] }]
+     });
+     if (result.canceled || !result.filePaths.length) return { ok: false, canceled: true };
+
+     const source = result.filePaths[0];
+     const ext = path.extname(source).toLowerCase();
+     if (!IMAGE_EXT.has(ext)) {
+       return { ok: false, message: 'Ez a fájltípus nem használható borítóként.' };
+     }
+
+     fs.mkdirSync(library.coverDir, { recursive: true });
+     const target = path.join(library.coverDir, `${game.id}-${Date.now()}${ext}`);
+     try {
+       fs.copyFileSync(source, target);
+     } catch (err) {
+       return { ok: false, message: `Nem sikerült másolni a képet: ${err.message}` };
+     }
+
+     deleteOldCover(game, target);
+     game.cover = target;
++    game.coverMode = 'manual';
+     library.saveNow();
+     broadcast();
+     return { ok: true };
+   });
+
+   ipcMain.handle('cover:reset', (_event, id) => {
+     const game = library.getGame(id);
+     if (!game) return { ok: false, message: 'Ismeretlen játék.' };
+     deleteOldCover(game, null);
+     game.cover = null;
++    game.coverMode = null;
+     library.saveNow();
+     broadcast();
+     return { ok: true };
+   });
+
+   // Újrakeresi a borítót a játék saját mappájában, és felülírja a korábbi
+   // automatikus találatot. A megtalált képet a kezelt covers mappába másoljuk.
++  // A felhasználó kézzel kiválasztott borítóját soha nem írjuk felül.
+   ipcMain.handle('cover:rescan', (_event, id) => {
+     const game = library.getGame(id);
+     if (!game) return { ok: false, message: 'Ismeretlen játék.' };
++    if (game.coverMode === 'manual') {
++      return {
++        ok: false,
++        message: 'Kézzel kiválasztott borítót nem írhatom felül automatikus felismeréssel.'
++      };
++    }
+     if (!exists(game.folder)) {
+       return { ok: false, message: 'A játék mappája nem érhető el.' };
+     }
+
+     const found = findCoverImage(toExtended(game.folder));
+     if (!found) {
+       return { ok: false, message: 'Nem találtam borítóképet a játék mappájában.' };
+     }
+
+     const target = copyCoverToStore(library, displayPath(found), game.id);
+     if (!target) {
+       return { ok: false, message: 'Nem sikerült bemásolni a megtalált képet.' };
+     }
+
+     deleteOldCover(game, target);
+     game.cover = target;
++    game.coverMode = 'auto';
+     library.saveNow();
+     broadcast();
+     return { ok: true };
+   });
+
+   // --- beállítások --------------------------------------------------------
+   ipcMain.handle('settings:update', (_event, patch) => {
+     library.setSettings(patch || {});
+     library.saveNow();
+     broadcast();
+     return { ok: true };
+   });
+diff --git a/src/main/library.js b/src/main/library.js
+index 534ee9b..87747b9 100644
+--- a/src/main/library.js
++++ src/main/library.js
+@@ -45,20 +45,23 @@ function normalizeGame(raw) {
+       kind,
+       path: launch.path ? String(launch.path) : '',
+       args: Array.isArray(launch.args) ? launch.args.map(String) : [],
+       cwd: launch.cwd ? String(launch.cwd) : '',
+       elevated: Boolean(launch.elevated)
+     },
+     processNames: Array.isArray(raw.processNames)
+       ? raw.processNames.map(String).filter(Boolean)
+       : [],
+     cover: raw.cover ? String(raw.cover) : null,
++    // Ki állította be a borítót: kézi kiválasztás ('manual') vagy automatikus
++    // felismerés ('auto'). A kézi borítót automatikus művelet nem írhatja felül.
++    coverMode: raw.coverMode === 'manual' || raw.coverMode === 'auto' ? raw.coverMode : null,
+     favorite: Boolean(raw.favorite),
+     playtimeSec: num(raw.playtimeSec),
+     lastPlayed: raw.lastPlayed ? num(raw.lastPlayed) : null,
+     addedAt: num(raw.addedAt, Date.now()),
+     source: raw.source === 'manual' ? 'manual' : 'auto',
+     titleLocked: Boolean(raw.titleLocked),
+     launchLocked: Boolean(raw.launchLocked)
+   };
+ }
+
+@@ -164,20 +167,24 @@ class LibraryStore {
+       if (Array.isArray(patch.launch.args)) game.launch.args = patch.launch.args.map(String);
+       if (patch.launch.cwd !== undefined) game.launch.cwd = String(patch.launch.cwd);
+       if (patch.launch.elevated !== undefined) game.launch.elevated = Boolean(patch.launch.elevated);
+       game.launchLocked = true;
+     }
+     if (Array.isArray(patch.processNames)) {
+       game.processNames = patch.processNames.map(String).filter(Boolean);
+     }
+     if (typeof patch.favorite === 'boolean') game.favorite = patch.favorite;
+     if (patch.cover !== undefined) game.cover = patch.cover ? String(patch.cover) : null;
++    if (patch.coverMode !== undefined) {
++      game.coverMode =
++        patch.coverMode === 'manual' || patch.coverMode === 'auto' ? patch.coverMode : null;
++    }
+
+     this.scheduleSave();
+     return game;
+   }
+ 
+   removeGame(id) {
+     const before = this.data.games.length;
+     this.data.games = data.games.filter((g) => g.id !== id);
+     if (this.data.games.length === before) return false;
+     this.scheduleSave();
+diff --git a/src/main/scanner.js b/src/main/scanner.js
+index d1efe5c..1e34c82 100644
+--- a/src/main/scanner.js
++++ src/main/scanner.js
+@@ -312,34 +312,38 @@ function detectGame(folderExt) {
+   const ancestorTitle = pickAncestorTitle(best.full, folderExt);
+   const title = ancestorTitle || cleanTitle(folderName);
+ 
+   const game = {
+     id: slugId(folderExt),
+     title,
+     folder: folderExt,
+     launch,
+     processNames,
+     cover: null,
++    coverMode: null,
+     favorite: false,
+     playtimeSec: 0,
+     lastPlayed: null,
+     addedAt: Date.now(),
+     source: 'auto',
+     titleLocked: false,
+     launchLocked: false
+   };
+
+   // Automatikus borítófelismerés: csak új játéknál fut, kézi borítót nem ír felül
+   // (a mergeScanResults a meglévő játék cover mezőjéhez nem nyúl).
+   if (!game.cover) {
+     const found = findCoverImage(folderExt);
+-    if (found) game.cover = displayPath(found);
++    if (found) {
++      game.cover = displayPath(found);
++      game.coverMode = 'auto';
++    }
+   }
+
+   return game;
+ }
+
+ /**
+  * Végigolvassa a beállított könyvtárakat, és visszaadja a talált indítókat.
+  * Nem ír semmit, a hívó dönti el, hogyan vonja össze a meglévő listával.
+  */
+ function scanRoots(settings) {
+   const roots = Array.isArray(settings?.libraryRoots) ? settings.libraryRoots : [];
+   const skipLaunchers = settings?.skipLauncherFolders !== false;
+   const found = [];
+   const errors = [];
+
+   for (const root of roots) {
+     if (!root) continue;
+     if (!isDirectory(root)) {
+       errors.push({ root, message: 'A könyvtár nem érhető el' });
+       continue;
+     }
+
+     let entries;
+     try {
+       entries = fs.readdirSync(e(root), { withFileTypes: true });
+     } catch (err) {
+       errors.push({ root, message: err.message });
+       continue;
+     }
+
+     for (const entry of entries) {
+       if (!entry.isDirectory()) continue;
+       if (entry.isSymbolicLink()) continue;
+       if (entry.name.startswith('.')) continue;
+       if (skipLaunchers && LAUNCHER_FOLDER.test(entry.name)) continue;
+
+       const folderExt = joinExtended(e(root), entry.name);
+       try {
+         const game = detectGame(folderExt);
+         if (game) found.push(game);
+       } catch (err) {
+         errors.push({ root: displayPath(folderExt), message: err.message });
+       }
+     }
+   }
+
+   return { games: found, errors };
+ }
+
+ /**
+  * A scan eredményét összevonja a meglévő listával.
+  * - Új mappa -> új játék
+  * - Meglévő -> csak az automatikus mezők frissülnek (cím/indító, ha nem szerkesztetted kézzel)
+  */
+ /** Két mappaútvonal összehasonlítása fájlrendszeri szintre (kiszűri a \\?\ előtagot és a záró pontot/szóközt). */
+ function normalizeFolderForCompare(folder) {
+   return displayPath(folder)
+     .replace(/[. ]+$/g, '')
+     .toLowerCase();
+ }
+
+ function mergeScanResults(store, scan) {
+   const summary = { added: 0, updated: 0, unchanged: 0, errors: scan.errors };
+
+   for (const detected of scan.games) {
+     const existing = store.games.find(
+       (g) => normalizeFolderForCompare(g.folder) === normalizeFolderForCompare(detected.folder)
+     );
+
+     if (!existing) {
+       // Az automatikusan talált borítót a covers mappába másoljuk, különben
+       // a cover:// protokoll (ami csak a coverDir-ből szolgál ki) nem találná meg.
+       const copied = copyCoverToStore(store, detected.cover, detected.id);
+-      if (copied) detected.cover = copied;
++      if (copied) {
++        detected.cover = copied;
++        detected.coverMode = 'auto';
++      }
+       store.data.games.push(detected);
+       summary.added++;
+       continue;
+     }
+
+     let changed = false;
+     if (!existing.titleLocked && detected.title && existing.title !== detected.title) {
+       existing.title = detected.title;
+       changed = true;
+     }
+     if (!existing.launchLocked) {
+       const same =
+         existing.launch.kind === detected.launch.kind &&
+         existing.launch.path === detected.launch.path &&
+         existing.launch.cwd === detected.launch.cwd &&
+         existing.launch.elevated === detected.launch.elevated;
+       if (!same) {
+         existing.launch = detected.launch;
+         existing.processNames = detected.processNames;
+         changed = true;
+       }
+     }
+     // Re-scan: a meglévő, borító nélküli játék megkapja a felismert borítót.
+     // A felhasználó által beállított borítót soha nem írjuk felül.
+     if (!existing.cover && detected.cover) {
+       const copied = copyCoverToStore(store, detected.cover, existing.id);
+       if (copied) {
+         existing.cover = copied;
++        existing.coverMode = 'auto';
+         changed = true;
+       }
+     }
+     if (changed) summary.updated++;
+     else summary.unchanged++;
+   }
+
+   store.scheduleSave();
+   return summary;
+ }
