@@ -7,6 +7,7 @@ const {
   fromExtended,
   joinExtended,
   isDirectory,
+  exists,
   displayPath
 } = require('./paths');
 const { slugId } = require('./library');
@@ -31,6 +32,12 @@ const TECH_NAME =
   /^(bin|bins|binaries|win32|win64|x64|x86|amd64|game|games|pc|sp\d+|mp\d+|redist|engine|content|data|system|plugins|scripts|support|tools|config|saved|savegames|logs?|shipping|game files|program files|resources|build|dist)$/i;
 
 const SMALL_WORDS = /^(of|the|and|in|on|at|to|for|a|an|vs|de|la|le)$/i;
+
+/** Borítónak elfogadott képek, prioritási sorrendben. */
+const COVER_CANDIDATES = ['folder.jpg', 'cover.jpg', 'poster.jpg', 'banner.jpg'];
+
+/** Fallback: bármely képfájl kiterjesztése. */
+const COVER_FALLBACK_EXT = /\.(png|jpe?g|webp|gif|bmp)$/i;
 
 function e(pathStr) {
   return toExtended(pathStr);
@@ -210,6 +217,31 @@ function defaultCwd(launchFile) {
   return dir;
 }
 
+/**
+ * A játék mappájában található borítókép.
+ * Először a prioritált neveket nézzük, aztán a mappa bármely képfájlját.
+ * Extended pathot ad vissza, vagy null-t, ha nincs kép.
+ */
+function findCoverImage(folderExt) {
+  for (const candidate of COVER_CANDIDATES) {
+    const coverPath = joinExtended(folderExt, candidate);
+    if (exists(coverPath)) return coverPath;
+  }
+
+  let entries;
+  try {
+    entries = fs.readdirSync(toExtended(folderExt), { withFileTypes: true });
+  } catch {
+    return null;
+  }
+  for (const entry of entries) {
+    if (entry.isFile() && COVER_FALLBACK_EXT.test(entry.name)) {
+      return joinExtended(folderExt, entry.name);
+    }
+  }
+  return null;
+}
+
 function detectGame(folderExt) {
   const folderName = path.win32.basename(fromExtended(folderExt));
   const files = collectFiles(folderExt);
@@ -259,7 +291,7 @@ function detectGame(folderExt) {
   const ancestorTitle = pickAncestorTitle(best.full, folderExt);
   const title = ancestorTitle || cleanTitle(folderName);
 
-  return {
+  const game = {
     id: slugId(folderExt),
     title,
     folder: folderExt,
@@ -274,6 +306,15 @@ function detectGame(folderExt) {
     titleLocked: false,
     launchLocked: false
   };
+
+  // Automatikus borítófelismerés: csak új játéknál fut, kézi borítót nem ír felül
+  // (a mergeScanResults a meglévő játék cover mezőjéhez nem nyúl).
+  if (!game.cover) {
+    const found = findCoverImage(folderExt);
+    if (found) game.cover = displayPath(found);
+  }
+
+  return game;
 }
 
 /**
