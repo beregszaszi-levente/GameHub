@@ -400,6 +400,21 @@ select:focus-visible,
   border-color: rgba(239, 68, 68, 0.55);
 }
 
+.ghost-btn.accent {
+  color: var(--color-secondary);
+  border-color: rgba(139, 92, 246, 0.4);
+}
+
+.ghost-btn.accent:hover {
+  background: rgba(139, 92, 246, 0.14);
+  border-color: rgba(139, 92, 246, 0.65);
+}
+
+.ghost-btn:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
 /* ── Content ────────────────────────────────────────────────────────────── */
 
 .content {

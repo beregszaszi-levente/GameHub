@@ -452,5 +452,6 @@ module.exports = {
   detectGame,
   cleanTitle,
   extractProcessNames,
+  findCoverImage,
   copyCoverToStore
 };

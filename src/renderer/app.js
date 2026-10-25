@@ -690,6 +690,27 @@ function bind() {
     if (game) updateCoverPreview(game);
     render();
   });
+  el('btn-cover-rescan').addEventListener('click', async (event) => {
+    if (!state.editorId) return;
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const result = await api.rescanCover(state.editorId);
+      if (!result.ok) {
+        toast(result.message || 'Nem találtam borítót a játék mappájában.', 'error');
+        return;
+      }
+      await refreshState();
+      const game = gameById(state.editorId);
+      if (game) updateCoverPreview(game);
+      render();
+      toast('Borító frissítve a játék mappájából.', 'success');
+    } catch (err) {
+      toast(`Borítókeresési hiba: ${err.message}`, 'error');
+    } finally {
+      button.disabled = false;
+    }
+  });
 
   // Beállítások
   el('btn-add-root').addEventListener('click', async () => {

@@ -4,12 +4,13 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { ipcMain, dialog, shell } = require('electron');
 
-const { displayPath, exists, hasInvalidName } = require('./paths');
+const { displayPath, exists, hasInvalidName, toExtended } = require('./paths');
 const {
   scanRoots,
   mergeScanResults,
   detectGame,
   cleanTitle,
+  findCoverImage,
   copyCoverToStore
 } = require('./scanner');
 const { slugId } = require('./library');
@@ -298,6 +299,32 @@ function registerIpc({ library, getWindow }) {
     if (!game) return { ok: false, message: 'Ismeretlen játék.' };
     deleteOldCover(game, null);
     game.cover = null;
+    library.saveNow();
+    broadcast();
+    return { ok: true };
+  });
+
+  // Újrakeresi a borítót a játék saját mappájában, és felülírja a korábbi
+  // automatikus találatot. A megtalált képet a kezelt covers mappába másoljuk.
+  ipcMain.handle('cover:rescan', (_event, id) => {
+    const game = library.getGame(id);
+    if (!game) return { ok: false, message: 'Ismeretlen játék.' };
+    if (!exists(game.folder)) {
+      return { ok: false, message: 'A játék mappája nem érhető el.' };
+    }
+
+    const found = findCoverImage(toExtended(game.folder));
+    if (!found) {
+      return { ok: false, message: 'Nem találtam borítóképet a játék mappájában.' };
+    }
+
+    const target = copyCoverToStore(library, displayPath(found), game.id);
+    if (!target) {
+      return { ok: false, message: 'Nem sikerült bemásolni a megtalált képet.' };
+    }
+
+    deleteOldCover(game, target);
+    game.cover = target;
     library.saveNow();
     broadcast();
     return { ok: true };

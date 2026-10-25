@@ -15,7 +15,13 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const { scanRoots, detectGame, mergeScanResults } = require('../src/main/scanner');
+const {
+  scanRoots,
+  detectGame,
+  mergeScanResults,
+  findCoverImage,
+  copyCoverToStore
+} = require('../src/main/scanner');
 const { toExtended, displayPath } = require('../src/main/paths');
 
 const roots = process.argv.slice(2).filter(Boolean);
@@ -166,6 +172,38 @@ withTempGame(['folder.jpg'], (dir) => {
     );
     assert.strictEqual(fs.readFileSync(existing.cover, 'utf8'), 'fake-image');
   });
+  checks++;
+});
+
+// 7. A cover:rescan alapja: findCoverImage az adott játék mappájában keres,
+//    prioritás szerint, és a talált kép a covers mappába másolható.
+withTempGame(['banner.jpg', 'folder.jpg'], (dir) => {
+  const found = findCoverImage(toExtended(dir));
+  assert.ok(found, 'findCoverImage nem talált képet');
+  assert.strictEqual(
+    displayPath(found),
+    displayPath(path.join(dir, 'folder.jpg')),
+    'a prioritási sorrend élén a folder.jpg áll'
+  );
+
+  withTempCoverDir((coverDir) => {
+    const copied = copyCoverToStore({ coverDir }, displayPath(found), 'rescan-game');
+    assert.ok(copied, 'copyCoverToStore nem adott vissza útvonalat');
+    assert.ok(
+      displayPath(copied).toLowerCase().startsWith(coverDir.toLowerCase()),
+      'az új borítónak a covers mappába kell kerülnie'
+    );
+    assert.strictEqual(fs.readFileSync(copied, 'utf8'), 'fake-image');
+    assert.ok(fs.existsSync(path.join(dir, 'folder.jpg')), 'a forrásképet meg kell hagyni');
+  });
+  checks++;
+});
+
+// 8. Kép nélküli (vagy nem létező) mappában a rescan nem talál borítót.
+withTempGame([], (dir) => {
+  assert.strictEqual(findCoverImage(toExtended(dir)), null, 'kép nélkül nincs találat');
+  const missing = path.join(dir, 'nincs-ilyen-mappa');
+  assert.strictEqual(findCoverImage(toExtended(missing)), null, 'nem létező mappára sincs találat');
   checks++;
 });
 

@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('gamehub', {
 
   pickCover: (id) => ipcRenderer.invoke('cover:pick', id),
   resetCover: (id) => ipcRenderer.invoke('cover:reset', id),
+  rescanCover: (id) => ipcRenderer.invoke('cover:rescan', id),
   fixFolderName: (id) => ipcRenderer.invoke('game:fixFolderName', id),
 
   updateSettings: (patch) => ipcRenderer.invoke('settings:update', patch),
