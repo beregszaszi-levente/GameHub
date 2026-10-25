@@ -1,0 +1,20 @@
+# Electron / node
+node_modules/
+dist/
+*.log
+npm-debug.log*
+
+# Az app saját, gépfüggő adatai (normálisan a %APPDATA%\GameHub-ban van)
+library.json
+covers/
+
+# OpenCode konfiguráció (nem az app része)
+config.json
+.opencode/
+
+# Ideiglenes / build artefaktumok
+.tmp/
+dev-*.png
+*.tsbuildinfo
+Thumbs.db
+.DS_Store

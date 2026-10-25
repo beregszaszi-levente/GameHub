@@ -1,0 +1,20 @@
+{
+  "name": "gamehub",
+  "productName": "GameHub",
+  "version": "0.1.0",
+  "description": "Steam-szerű helyi játéklauncher – a D:\\Games mappa játékai egy helyen",
+  "main": "src/main/main.js",
+  "author": "Beregszaszi Levente <beregszaszi.levi@gmail.com>",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "test:scan": "node scripts/test-scan.js",
+    "icon": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/make-icon.ps1",
+    "dist": "electron-builder --win portable"
+  },
+  "devDependencies": {
+    "electron": "^45.0.0",
+    "electron-builder": "^26.18.0"
+  }
+}

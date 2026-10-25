@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="hu">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' cover: data:; style-src 'self' 'unsafe-inline'; script-src 'self'"
+    />
+    <title>GameHub</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M8 5.5v13l10-6.5-10-6.5z" fill="currentColor" />
+            </svg>
+          </span>
+          <span class="brand-name">Game<strong>Hub</strong></span>
+        </div>
+
+        <nav class="nav" aria-label="Nézetek">
+          <button class="nav-item is-active" data-view="library">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4V4zm10 0h6v6h-6V4zM4 14h6v6H4v-6zm10 0h6v6h-6v-6z" fill="currentColor"/></svg>
+            <span>Könyvtár</span>
+            <span class="nav-count" id="count-library">0</span>
+          </button>
+          <button class="nav-item" data-view="favorites">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.3l-1.1-1C6.1 14.9 3 12.1 3 8.6 3 5.9 5.1 4 7.7 4c1.5 0 2.9.7 3.8 1.9l.5.6.5-.6C13.4 4.7 14.8 4 16.3 4 18.9 4 21 5.9 21 8.6c0 3.5-3.1 6.3-7.9 10.7l-1.1 1z" fill="currentColor"/></svg>
+            <span>Kedvencek</span>
+            <span class="nav-count" id="count-favorites">0</span>
+          </button>
+          <button class="nav-item" data-view="running">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10-6.5-10-6.5z" fill="currentColor"/></svg>
+            <span>Futó játékok</span>
+            <span class="nav-count" id="count-running">0</span>
+          </button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <button class="nav-item" id="btn-settings">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7zm8-3.5c0-.5 0-.9-.1-1.3l2-1.5-2-3.4-2.3 1a8 8 0 0 0-2.2-1.3L15 3H9l-.4 2.5c-.8.3-1.5.7-2.2 1.3l-2.3-1-2 3.4 2 1.5a8 8 0 0 0 0 2.6l-2 1.5 2 3.4 2.3-1c.7.6 1.4 1 2.2 1.3L9 21h6l.4-2.5c.8-.3 1.5-.7 2.2-1.3l2.3 1 2-3.4-2-1.5c.1-.4.1-.8.1-1.3z" fill="currentColor"/></svg>
+            <span>Beállítások</span>
+          </button>
+          <div class="sidebar-stat" id="stat-total"></div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <label class="search">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 3a7.5 7.5 0 1 1-4.6 13.4l-3.2 3.2-1.4-1.4 3.2-3.2A7.5 7.5 0 0 1 10.5 3zm0 2a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11z" fill="currentColor"/></svg>
+            <input id="search" type="search" placeholder="Keresés a könyvtárban…" autocomplete="off" spellcheck="false" />
+            <kbd>Ctrl F</kbd>
+          </label>
+
+          <div class="topbar-actions">
+            <label class="sort">
+              <span>Rendezés</span>
+              <select id="sort">
+                <option value="name">Név szerint</option>
+                <option value="recent">Legutóbb játszott</option>
+                <option value="playtime">Legtöbbet játszott</option>
+                <option value="added">Legújabb</option>
+              </select>
+            </label>
+            <button class="icon-btn" id="btn-refresh" title="Könyvtárak újraolvasása">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V2L7 6l5 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z" fill="currentColor"/></svg>
+            </button>
+            <button class="primary-btn" id="btn-add">
+              <span class="plus">+</span> Játék hozzáadása
+            </button>
+          </div>
+        </header>
+
+        <section class="content">
+          <div class="content-head">
+            <h1 id="view-title">Könyvtár</h1>
+            <p id="view-subtitle"></p>
+          </div>
+
+          <div id="grid" class="grid" role="list"></div>
+
+          <div id="empty" class="empty hidden">
+            <div class="empty-art">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10-6.5-10-6.5z" fill="currentColor"/></svg>
+            </div>
+            <h2 id="empty-title">Még nincs játékod</h2>
+            <p id="empty-text">
+              Add hozzá a játékaid mappáját, vagy olvasd újra a beállított könyvtárakat.
+            </p>
+            <div class="empty-actions">
+              <button class="primary-btn" id="empty-add">Játék hozzáadása</button>
+              <button class="ghost-btn" id="empty-scan">Könyvtárak újraolvasása</button>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div class="toasts" id="toasts"></div>
+
+    <!-- Részletek -->
+    <div class="overlay hidden" id="detail" role="dialog" aria-modal="true">
+      <div class="modal detail-modal">
+        <button class="modal-close" data-close="detail" title="Bezárás">×</button>
+        <div class="detail-hero" id="detail-hero">
+          <img id="detail-cover" alt="" class="hidden" />
+          <div class="detail-hero-fallback" id="detail-fallback"></div>
+          <div class="detail-hero-shade"></div>
+          <div class="detail-hero-text">
+            <h2 id="detail-title"></h2>
+            <div class="detail-sub" id="detail-sub"></div>
+          </div>
+        </div>
+        <div class="detail-body">
+          <div class="detail-stats">
+            <div class="stat">
+              <span>Játékidő</span>
+              <strong id="detail-time">–</strong>
+            </div>
+            <div class="stat">
+              <span>Utoljára játszott</span>
+              <strong id="detail-last">–</strong>
+            </div>
+            <div class="stat wide">
+              <span>Indító</span>
+              <strong id="detail-launch">–</strong>
+            </div>
+          </div>
+          <div class="detail-note hidden" id="detail-note">
+            <span id="detail-note-text"></span>
+            <button class="ghost-btn small hidden" id="detail-fix-name">Mappa átnevezése</button>
+          </div>
+          <div class="detail-actions">
+            <button class="primary-btn big" id="detail-play">
+              <span class="play-icon"></span> Játszás
+            </button>
+            <button class="ghost-btn" id="detail-fav">Kedvencekhez</button>
+            <button class="ghost-btn" id="detail-folder">Mappa megnyitása</button>
+            <button class="ghost-btn" id="detail-edit">Szerkesztés</button>
+            <button class="ghost-btn danger" id="detail-remove">Eltávolítás</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Szerkesztő -->
+    <div class="overlay hidden" id="editor" role="dialog" aria-modal="true">
+      <div class="modal form-modal">
+        <button class="modal-close" data-close="editor" title="Bezárás">×</button>
+        <h2 id="editor-title">Játék szerkesztése</h2>
+        <p class="modal-sub">A beállítások mentés után azonnal életbe lépnek.</p>
+
+        <form id="editor-form" class="form">
+          <div class="field">
+            <label for="edit-title">Név</label>
+            <input id="edit-title" type="text" required maxlength="120" />
+          </div>
+
+          <div class="field-row">
+            <div class="field">
+              <label for="edit-kind">Indító típusa</label>
+              <select id="edit-kind">
+                <option value="exe">Program (.exe)</option>
+                <option value="bat">Parancsfájl (.bat)</option>
+              </select>
+            </div>
+            <div class="field grow">
+              <label for="edit-path">Indító</label>
+              <div class="input-with-button">
+                <input id="edit-path" type="text" placeholder="pl. D:\Games\Jatek\Jatek.exe" />
+                <button type="button" class="ghost-btn" id="btn-browse-exe">Tallózás</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div class="field grow">
+              <label for="edit-args">Argumentumok</label>
+              <input id="edit-args" type="text" placeholder="szóközzel elválasztva (opcionális)" />
+            </div>
+            <div class="field">
+              <label for="edit-process">Folyamat neve</label>
+              <input id="edit-process" type="text" placeholder="pl. game.exe" />
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="edit-cwd">Munkakönyvtár</label>
+            <div class="input-with-button">
+              <input id="edit-cwd" type="text" placeholder="alapból az indító mappája" />
+              <button type="button" class="ghost-btn" id="btn-browse-cwd">Tallózás</button>
+            </div>
+          </div>
+
+          <label class="checkbox">
+            <input type="checkbox" id="edit-elevated" />
+            <span>Rendszergazdai indítás (UAC) – anti-cheat / driver miatt kellhet</span>
+          </label>
+
+          <div class="field">
+            <label>Borítókép</label>
+            <div class="cover-row">
+              <div class="cover-preview" id="edit-cover-preview"></div>
+              <div class="cover-actions">
+                <button type="button" class="ghost-btn" id="btn-cover">Kép kiválasztása</button>
+                <button type="button" class="ghost-btn" id="btn-cover-reset">Generált borító</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-footer">
+            <button type="button" class="ghost-btn" data-close="editor">Mégse</button>
+            <button type="submit" class="primary-btn">Mentés</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Beállítások -->
+    <div class="overlay hidden" id="settings" role="dialog" aria-modal="true">
+      <div class="modal form-modal">
+        <button class="modal-close" data-close="settings" title="Bezárás">×</button>
+        <h2>Beállítások</h2>
+        <p class="modal-sub">A játékok automatikusan innen a könyvtárakból kerülnek elő.</p>
+
+        <section class="settings-section">
+          <h3>Könyvtárak</h3>
+          <ul class="root-list" id="root-list"></ul>
+          <div class="row-actions">
+            <button class="ghost-btn" id="btn-add-root">+ Könyvtár hozzáadása</button>
+            <button class="ghost-btn" id="btn-scan-settings">Újraolvasás</button>
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <h3>Viselkedés</h3>
+          <label class="checkbox">
+            <input type="checkbox" id="opt-autoscan" />
+            <span>Induláskor automatikusan olvassa újra a könyvtárakat</span>
+          </label>
+          <label class="checkbox">
+            <input type="checkbox" id="opt-skip-launchers" />
+            <span>Launcher-mappák kihagyása (Epic Games, Steam, GOG…)</span>
+          </label>
+        </section>
+
+        <section class="settings-section">
+          <h3>Adatok</h3>
+          <p class="muted" id="settings-datadir"></p>
+          <div class="row-actions">
+            <button class="ghost-btn" id="btn-open-data">Adatmappa megnyitása</button>
+          </div>
+          <p class="muted small">
+            A játéklista és a játékidők itt tárolódnak, a könyvtárakhoz nem nyúlunk.
+          </p>
+        </section>
+      </div>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
