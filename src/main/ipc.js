@@ -22,9 +22,14 @@ const { findSteamLibraryFolders, scanSteamApps, STEAM_DEFAULT } = require('./ste
 const IMAGE_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp']);
 const COVER_SCHEME = 'cover://local/';
 
-/** Két mappaútvonal összehasonlítása fájlrendszeri szintre (kiszűri a \\?\ előtagot és a záró pontot/szóközt). */
+/**
+ * Két mappaútvonal összehasonlítása fájlrendszeri szintre.
+ * Kiszűri a `\\?\` előtagot (a scanner ilyennel menti a mappákat), a záró
+ * elválasztót, valamint a záró pontot/szóközt (a Win32 ezeket lecsípné).
+ */
 function normalizeFolderForCompare(folder) {
   return displayPath(folder)
+    .replace(/[\\/]+$/g, '')
     .replace(/[. ]+$/g, '')
     .toLowerCase();
 }
@@ -490,8 +495,11 @@ function registerIpc({ library, getWindow }) {
     if (!Array.isArray(items)) return { ok: false, message: 'Érvénytelen import lista.' };
 
     const now = Date.now();
+    // A scan `\\?\` előtaggal menti a mappákat, a Steam import viszont sima
+    // útvonalat ad. Csak normalizált alakon szabad összehasonlítani, különben
+    // a LibraryStore.addGame azonos id-n felülírná a meglévő játékot.
     const existingFolders = new Set(
-      library.games.map((game) => String(game.folder).replace(/[\\/]+$/g, '').toLowerCase())
+      library.games.map((game) => normalizeFolderForCompare(game.folder))
     );
     let added = 0;
     let skipped = 0;
@@ -499,7 +507,7 @@ function registerIpc({ library, getWindow }) {
     for (const item of items) {
       const title = String(item?.name ?? item?.title ?? '').trim();
       const folder = String(item?.folder ?? '').trim();
-      const key = folder.replace(/[\\/]+$/g, '').toLowerCase();
+      const key = normalizeFolderForCompare(folder);
 
       if (!title || !folder || !path.win32.isAbsolute(folder) || existingFolders.has(key)) {
         skipped++;

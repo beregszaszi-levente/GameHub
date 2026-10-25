@@ -457,9 +457,21 @@ function renderSettings() {
 
 /* ---------------------------- steam import ------------------------------ */
 
+/**
+ * Mappa-összehasonlító kulcs a felülethez. A scanner `\\?\` előtaggal menti a
+ * mappákat, ezért a prefixet, a záró elválasztót és a záró pontot/szóközt is
+ * le kell vágni, különben a már meglévő játék "újként" jelenne meg.
+ */
 function folderKey(folder) {
-  return String(folder || '')
+  let value = String(folder || '');
+  if (value.startsWith('\\\\?\\UNC\\')) {
+    value = `\\\\${value.slice(8)}`;
+  } else if (value.startsWith('\\\\?\\')) {
+    value = value.slice(4);
+  }
+  return value
     .replace(/[\\/]+$/g, '')
+    .replace(/[. ]+$/g, '')
     .toLowerCase();
 }
 
@@ -485,7 +497,7 @@ function updateSteamImportSelection() {
 
 function renderSteamImport(result) {
   state.steamGames = result.games;
-  const existingKeys = new Set(games().map((game) => folderKey(game.folder)));
+  const existingKeys = new Set(games().map((game) => folderKey(game.folderDisplay || game.folder)));
   const existingCount = result.games.filter((game) =>
     existingKeys.has(folderKey(game.folder))
   ).length;

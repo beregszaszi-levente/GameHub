@@ -16,7 +16,7 @@ const os = require('node:os');
 const path = require('node:path');
 const Module = require('node:module');
 
-const { LibraryStore } = require('../src/main/library');
+const { LibraryStore, slugId } = require('../src/main/library');
 
 const handlers = new Map();
 
@@ -216,6 +216,58 @@ async function main() {
       assert.strictEqual(result.added, 1);
       assert.strictEqual(result.skipped, 2);
       assert.strictEqual(library.games.length, 3);
+    });
+
+    await test('steam:addGames kihagyja a \\\\?\\ előtaggal mentett meglévő mappát', async () => {
+      // Regresszió: a scanner `\\?\` előtaggal menti a mappát, a Steam import
+      // viszont sima útvonalat ad. A két alakot össze kell vetni, különben a
+      // LibraryStore.addGame azonos id-n felülírná a meglévő játékot.
+      const games = await steamImport({});
+      const gamma = games.games.find((game) => game.appid === '789');
+      assert.ok(gamma, 'Gamma Game megtalálható');
+
+      const extended = `\\\\?\\${gamma.folder}`;
+      const existing = library.addGame({
+        title: 'Saját cím',
+        folder: extended,
+        launch: {
+          kind: 'exe',
+          path: 'D:\\Games\\gamma.exe',
+          args: [],
+          cwd: extended,
+          elevated: false
+        },
+        processNames: ['gamma.exe'],
+        cover: 'D:\\covers\\gamma.png',
+        coverMode: 'manual',
+        favorite: true,
+        playtimeSec: 120,
+        lastPlayed: null,
+        addedAt: Date.now(),
+        source: 'auto',
+        titleLocked: true,
+        launchLocked: true
+      });
+      assert.ok(existing, 'a meglévő játék létrejött');
+      // Ugyanaz az id, amit a sima útvonalú Steam import kapna -> ezért kell a szűrés.
+      assert.strictEqual(existing.id, slugId(gamma.folder));
+
+      const countBefore = library.games.length;
+      const result = await addGames({}, [gamma]);
+      assert.strictEqual(result.ok, true);
+      assert.strictEqual(result.added, 0);
+      assert.strictEqual(result.skipped, 1);
+      assert.strictEqual(library.games.length, countBefore);
+
+      const after = library.getGame(existing.id);
+      assert.strictEqual(after.folder, extended);
+      assert.strictEqual(after.title, 'Saját cím');
+      assert.strictEqual(after.source, 'auto');
+      assert.strictEqual(after.launch.path, 'D:\\Games\\gamma.exe');
+      assert.strictEqual(after.cover, 'D:\\covers\\gamma.png');
+      assert.strictEqual(after.coverMode, 'manual');
+      assert.strictEqual(after.favorite, true);
+      assert.deepStrictEqual(after.processNames, ['gamma.exe']);
     });
 
     await test('steam:addGames érvénytelen elemeket kihagy', async () => {
