@@ -76,6 +76,10 @@
             <button class="icon-btn" id="btn-refresh" title="Könyvtárak újraolvasása">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V2L7 6l5 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z" fill="currentColor"/></svg>
             </button>
+            <button class="ghost-btn" id="btn-steam-import" title="Játékok importálása a Steam könyvtárból">
+              <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v10m0 0l-4-4m4 4l4-4M5 16v4h14v-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span class="btn-label">Steam import</span>
+            </button>
             <button class="primary-btn" id="btn-add">
               <span class="plus">+</span> Játék hozzáadása
             </button>
@@ -268,6 +272,41 @@
             A játéklista és a játékidők itt tárolódnak, a könyvtárakhoz nem nyúlunk.
           </p>
         </section>
+      </div>
+    </div>
+
+    <!-- Steam import -->
+    <div
+      class="overlay hidden"
+      id="steam-import"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="steam-import-title"
+    >
+      <div class="modal form-modal steam-import-modal">
+        <button class="modal-close" data-close="steam-import" title="Bezárás">×</button>
+        <h2 id="steam-import-title">Steam könyvtár import</h2>
+        <p class="modal-sub" id="steam-import-sub">
+          Válaszd ki, mely Steam játékokat vedd fel a könyvtárba. Az indítót később a
+          szerkesztőben állíthatod be.
+        </p>
+
+        <div class="steam-import-toolbar">
+          <label class="checkbox">
+            <input type="checkbox" id="steam-import-all" />
+            <span>Mind kijelölése</span>
+          </label>
+          <span class="steam-import-count" id="steam-import-count" aria-live="polite"></span>
+        </div>
+
+        <div class="steam-import-list" id="steam-import-list"></div>
+
+        <div class="form-footer">
+          <button type="button" class="ghost-btn" data-close="steam-import">Mégsem</button>
+          <button type="button" class="primary-btn" id="steam-import-add" disabled>
+            Kijelölt hozzáadása
+          </button>
+        </div>
       </div>
     </div>
 

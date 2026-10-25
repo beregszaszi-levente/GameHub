@@ -30,6 +30,10 @@ contextBridge.exposeInMainWorld('gamehub', {
   removeRoot: (root) => ipcRenderer.invoke('settings:removeRoot', root),
   openDataFolder: () => ipcRenderer.invoke('app:openDataFolder'),
 
+  steamImport: () => ipcRenderer.invoke('steam:import'),
+  steamImportRoot: (root) => ipcRenderer.invoke('steam:importRoot', root),
+  steamAddGames: (games) => ipcRenderer.invoke('steam:addGames', games),
+
   pickExe: () => ipcRenderer.invoke('dialog:pickExe'),
   pickDirectory: () => ipcRenderer.invoke('dialog:pickDirectory'),
 

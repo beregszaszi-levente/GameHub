@@ -187,14 +187,23 @@ function normalizeLibraryPath(value) {
  */
 function findSteamLibraryFolders(steamRoot = STEAM_DEFAULT) {
   const root = steamRoot ? String(steamRoot) : STEAM_DEFAULT;
-  const vdfPath = path.join(root, 'libraryfolders.vdf');
+  // A valódi Steam telepítésben a libraryfolders.vdf a steamapps mappában van,
+  // de a korábbi/tesztelt elrendezés a gyökérben is előfordulhat.
+  const candidates = [
+    path.join(root, 'libraryfolders.vdf'),
+    path.join(root, 'steamapps', 'libraryfolders.vdf')
+  ];
 
-  let parsed;
-  try {
-    parsed = parseVdf(fs.readFileSync(toExtended(vdfPath), 'utf8'));
-  } catch {
-    return null;
+  let parsed = null;
+  for (const vdfPath of candidates) {
+    try {
+      parsed = parseVdf(fs.readFileSync(toExtended(vdfPath), 'utf8'));
+      break;
+    } catch {
+      /* próbáljuk a következő lehetséges helyet */
+    }
   }
+  if (!parsed) return null;
 
   const folders = findEntry(parsed, 'libraryfolders');
   if (!folders || typeof folders !== 'object') return null;

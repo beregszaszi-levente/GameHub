@@ -172,6 +172,20 @@ test('findSteamLibraryFolders: régi (lapos) libraryfolders.vdf formátum', () =
   });
 });
 
+test('findSteamLibraryFolders: a steamapps mappában lévő VDF (valódi Steam elrendezés)', () => {
+  withTempDir((dir) => {
+    const lib = path.join(dir, 'SteamLibrary');
+    writeFile(
+      path.join(dir, 'steamapps', 'libraryfolders.vdf'),
+      `"libraryfolders"
+{
+	"0" { "path" "${vdfQuote(lib)}" }
+}`
+    );
+    assert.deepStrictEqual(findSteamLibraryFolders(dir), [lib]);
+  });
+});
+
 test('findSteamLibraryFolders: hiányzó libraryfolders.vdf → null', () => {
   withTempDir((dir) => {
     assert.strictEqual(findSteamLibraryFolders(dir), null);

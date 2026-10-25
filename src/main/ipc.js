@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { ipcMain, dialog, shell } = require('electron');
 
-const { displayPath, exists, hasInvalidName, toExtended } = require('./paths');
+const { displayPath, exists, hasInvalidName, isDirectory, toExtended } = require('./paths');
 const {
   scanRoots,
   mergeScanResults,
@@ -17,6 +17,7 @@ const { slugId } = require('./library');
 const { launchGame } = require('./launcher');
 const { renameFolder } = require('./rename');
 const { PlaytimeTracker } = require('./tracker');
+const { findSteamLibraryFolders, scanSteamApps, STEAM_DEFAULT } = require('./steam-import');
 
 const IMAGE_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp']);
 const COVER_SCHEME = 'cover://local/';
@@ -26,6 +27,52 @@ function normalizeFolderForCompare(folder) {
   return displayPath(folder)
     .replace(/[. ]+$/g, '')
     .toLowerCase();
+}
+
+/** A megadott útvonalból a létező steamapps mappa (könyvtárgyökér vagy steamapps is lehet). */
+function steamAppsFromPath(input) {
+  if (!input) return null;
+  const value = String(input).trim();
+  if (!value) return null;
+
+  if (path.basename(value).toLowerCase() === 'steamapps' && isDirectory(value)) {
+    return value;
+  }
+
+  const candidate = path.join(value, 'steamapps');
+  return isDirectory(candidate) ? candidate : null;
+}
+
+/** Steam könyvtár-gyökér hozzáadása kis-nagybetűtől független duplikációszűréssel. */
+function addSteamRoot(roots, seen, root) {
+  if (!root) return;
+  const key = path.resolve(String(root)).toLowerCase();
+  if (seen.has(key)) return;
+  seen.add(key);
+  roots.push(String(root));
+}
+
+/** Az összes Steam könyvtárból összegyűjti a játékokat, appid szerint dedupálva. */
+function collectSteamGames(roots) {
+  const games = [];
+  const seenAppIds = new Set();
+
+  for (const root of roots) {
+    for (const game of scanSteamApps(root)) {
+      const appid = String(game.appid);
+      if (seenAppIds.has(appid)) continue;
+      seenAppIds.add(appid);
+      games.push({
+        appid,
+        name: game.name,
+        installDir: game.installDir,
+        folder: path.join(root, 'steamapps', 'common', game.installDir)
+      });
+    }
+  }
+
+  games.sort((a, b) => a.name.localeCompare(b.name, 'hu', { sensitivity: 'base' }));
+  return games;
 }
 
 function registerIpc({ library, getWindow }) {
@@ -382,6 +429,111 @@ function registerIpc({ library, getWindow }) {
     library.saveNow();
     broadcast();
     return { ok: true };
+  });
+
+  // --- Steam import -------------------------------------------------------
+  ipcMain.handle('steam:import', () => {
+    try {
+      const roots = [];
+      const seenRoots = new Set();
+
+      // Először az elmentett steamapps útvonalat próbáljuk. Az ott lévő
+      // libraryfolders.vdf-ből az összes Steam könyvtár kiolvasható.
+      const savedApps = steamAppsFromPath(library.settings.steamImportPath);
+      if (savedApps) {
+        addSteamRoot(roots, seenRoots, path.dirname(savedApps));
+        const savedFolders = findSteamLibraryFolders(savedApps);
+        if (savedFolders) {
+          for (const folder of savedFolders) addSteamRoot(roots, seenRoots, folder);
+        }
+      }
+
+      // Ha nincs elmentett útvonal, az alapértelmezett Steam telepítést keressük.
+      if (!roots.length) {
+        const detected = findSteamLibraryFolders(STEAM_DEFAULT);
+        if (detected) {
+          for (const folder of detected) addSteamRoot(roots, seenRoots, folder);
+        }
+      }
+
+      if (!roots.length) {
+        return {
+          ok: false,
+          needsManualPath: true,
+          message: 'A Steam nem található az alapértelmezett helyen.'
+        };
+      }
+
+      return { ok: true, games: collectSteamGames(roots), steamRoot: roots[0] };
+    } catch (err) {
+      return { ok: false, message: `Steam import hiba: ${err.message}` };
+    }
+  });
+
+  ipcMain.handle('steam:importRoot', (_event, root) => {
+    const steamapps = steamAppsFromPath(root);
+    if (!steamapps) {
+      return {
+        ok: false,
+        message:
+          'A kiválasztott mappában nem található steamapps mappa. Válaszd a Steam ' +
+          'telepítésén belüli steamapps mappát.'
+      };
+    }
+    library.setSettings({ steamImportPath: steamapps });
+    library.saveNow();
+    broadcast();
+    return { ok: true, path: steamapps };
+  });
+
+  ipcMain.handle('steam:addGames', (_event, items) => {
+    if (!Array.isArray(items)) return { ok: false, message: 'Érvénytelen import lista.' };
+
+    const now = Date.now();
+    const existingFolders = new Set(
+      library.games.map((game) => String(game.folder).replace(/[\\/]+$/g, '').toLowerCase())
+    );
+    let added = 0;
+    let skipped = 0;
+
+    for (const item of items) {
+      const title = String(item?.name ?? item?.title ?? '').trim();
+      const folder = String(item?.folder ?? '').trim();
+      const key = folder.replace(/[\\/]+$/g, '').toLowerCase();
+
+      if (!title || !folder || !path.win32.isAbsolute(folder) || existingFolders.has(key)) {
+        skipped++;
+        continue;
+      }
+
+      const created = library.addGame({
+        title,
+        folder,
+        launch: { kind: 'exe', path: '', args: [], cwd: folder, elevated: false },
+        processNames: [],
+        cover: null,
+        coverMode: null,
+        favorite: false,
+        playtimeSec: 0,
+        lastPlayed: null,
+        addedAt: now,
+        source: 'steam-import',
+        titleLocked: false,
+        launchLocked: false
+      });
+
+      if (!created) {
+        skipped++;
+        continue;
+      }
+
+      existingFolders.add(key);
+      added++;
+    }
+
+    library.saveNow();
+    broadcast();
+    return { ok: true, added, skipped };
   });
 
   ipcMain.handle('dialog:pickExe', async () => {
