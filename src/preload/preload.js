@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('gamehub', {
   launch: (id) => ipcRenderer.invoke('game:launch', id),
 
   updateGame: (id, patch) => ipcRenderer.invoke('game:update', id, patch),
+  toggleHide: (id) => ipcRenderer.invoke('game:toggleHide', id),
   addFromFolder: () => ipcRenderer.invoke('game:addFromFolder'),
   removeGame: (id) => ipcRenderer.invoke('game:remove', id),
   openFolder: (id) => ipcRenderer.invoke('game:openFolder', id),

@@ -21,6 +21,9 @@ const el = (id) => document.getElementById(id);
 const HEART_SVG =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.3l-1.1-1C6.1 14.9 3 12.1 3 8.6 3 5.9 5.1 4 7.7 4c1.5 0 2.9.7 3.8 1.9l.5.6.5-.6C13.4 4.7 14.8 4 16.3 4 18.9 4 21 5.9 21 8.6c0 3.5-3.1 6.3-7.9 10.7l-1.1 1z" fill="currentColor"/></svg>';
 
+const HIDE_SVG =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zm7 14H5v5h5v-4.8c-2.7-1.3-5-3.8-5-7.2s2.3-5.9 5-7.2V4.8c-2.7 1.3-5 3.8-5 7.2s2.3 5.9 5 7.2z" fill="currentColor"/></svg>';
+
 /* ---------------------------- helpers ----------------------------------- */
 
 function esc(value) {
@@ -138,6 +141,8 @@ async function refreshState() {
 function visibleGames() {
   let list = games().slice();
 
+  list = list.filter((game) => !game.hidden);
+
   if (state.view === 'favorites') list = list.filter((game) => game.favorite);
   if (state.view === 'running') list = list.filter((game) => game.running);
 
@@ -189,6 +194,10 @@ function cardMarkup(game, index, animate = false) {
         <button class="card-fav ${game.favorite ? 'on' : ''}" data-action="favorite"
                 title="${game.favorite ? 'Eltávolítás a kedvencekből' : 'Hozzáadás a kedvencekhez'}">
           ${HEART_SVG}
+        </button>
+        <button class="card-hide ${game.hidden ? 'on' : ''}" data-action="hide"
+                title="${game.hidden ? 'Visszaállítás a listára' : 'Elrejtés a listából'}">
+          ${HIDE_SVG}
         </button>
         <button class="card-play" data-action="play" title="Játszás"></button>
       </div>
@@ -344,6 +353,9 @@ function renderDetail(id) {
 
     const fav = el('detail-fav');
     if (fav) fav.textContent = game.favorite ? 'Kedvencek közül ki' : 'Kedvencekhez';
+
+    const hideBtn = el('detail-hide');
+    if (hideBtn) hideBtn.textContent = game.hidden ? 'Visszaállítás a listára' : 'Elrejtés';
   } catch (err) {
     console.error('[renderDetail] hiba:', err);
     toast('Hiba a részletek betöltésekor.', 'error');
@@ -644,6 +656,14 @@ async function toggleFavorite(id) {
   render();
 }
 
+async function toggleHide(id) {
+  const game = gameById(id);
+  if (!game) return;
+  await api.toggleHide(id);
+  await refreshState();
+  render();
+}
+
 async function rescan(button) {
   if (button) button.classList.add('spin');
   try {
@@ -740,6 +760,10 @@ function bind() {
       toggleFavorite(id);
       return;
     }
+    if (action === 'hide') {
+      toggleHide(id);
+      return;
+    }
     openDetail(id);
   });
 
@@ -767,6 +791,9 @@ function bind() {
   });
   el('detail-fav').addEventListener('click', () => {
     if (state.detailId) toggleFavorite(state.detailId);
+  });
+  el('detail-hide').addEventListener('click', () => {
+    if (state.detailId) toggleHide(state.detailId);
   });
   el('detail-folder').addEventListener('click', async () => {
     if (!state.detailId) return;

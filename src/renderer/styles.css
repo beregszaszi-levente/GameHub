@@ -638,6 +638,42 @@ select:focus-visible,
   color: #fff;
 }
 
+.card-hide {
+  position: absolute;
+  top: 52px;
+  right: 10px;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  background: rgba(8, 11, 17, 0.55);
+  backdrop-filter: blur(8px);
+  color: rgba(255, 255, 255, 0.5);
+  opacity: 0;
+  transition: opacity var(--transition-base), color var(--transition-base), background var(--transition-base);
+}
+
+.card-hide svg {
+  width: 16px;
+  height: 16px;
+}
+
+.card:hover .card-hide,
+.card-hide.on {
+  opacity: 1;
+}
+
+.card-hide.on {
+  color: #fca5a5;
+}
+
+.card-hide:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
 .badge-running {
   position: absolute;
   top: 10px;

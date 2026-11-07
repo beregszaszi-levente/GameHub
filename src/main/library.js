@@ -57,6 +57,7 @@ function normalizeGame(raw) {
     // felismerés ('auto'). A kézi borítót automatikus művelet nem írhatja felül.
     coverMode: raw.coverMode === 'manual' || raw.coverMode === 'auto' ? raw.coverMode : null,
     favorite: Boolean(raw.favorite),
+    hidden: Boolean(raw.hidden),
     playtimeSec: num(raw.playtimeSec),
     lastPlayed: raw.lastPlayed ? num(raw.lastPlayed) : null,
     addedAt: num(raw.addedAt, Date.now()),
@@ -178,6 +179,7 @@ class LibraryStore {
       game.processNames = patch.processNames.map(String).filter(Boolean);
     }
     if (typeof patch.favorite === 'boolean') game.favorite = patch.favorite;
+    if (typeof patch.hidden === 'boolean') game.hidden = patch.hidden;
     if (patch.cover !== undefined) game.cover = patch.cover ? String(patch.cover) : null;
     if (patch.coverMode !== undefined) {
       game.coverMode =

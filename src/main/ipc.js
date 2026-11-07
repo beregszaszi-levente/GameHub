@@ -247,6 +247,16 @@ function registerIpc({ library, getWindow }) {
     return { ok: true, id, needsManual: true };
   });
 
+  ipcMain.handle('game:toggleHide', (_event, id) => {
+    const game = library.getGame(id);
+    if (!game) return { ok: false, message: 'Ismeretlen játék.' };
+    const hidden = !game.hidden;
+    library.updateGame(id, { hidden });
+    library.saveNow();
+    broadcast();
+    return { ok: true, hidden };
+  });
+
   ipcMain.handle('game:remove', (_event, id) => {
     const game = library.getGame(id);
     if (!game) return { ok: false, message: 'Ismeretlen játék.' };
