@@ -22,7 +22,7 @@ const HEART_SVG =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.3l-1.1-1C6.1 14.9 3 12.1 3 8.6 3 5.9 5.1 4 7.7 4c1.5 0 2.9.7 3.8 1.9l.5.6.5-.6C13.4 4.7 14.8 4 16.3 4 18.9 4 21 5.9 21 8.6c0 3.5-3.1 6.3-7.9 10.7l-1.1 1z" fill="currentColor"/></svg>';
 
 const HIDE_SVG =
-  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zm7 14H5v5h5v-4.8c-2.7-1.3-5-3.8-5-7.2s2.3-5.9 5-7.2V4.8c-2.7 1.3-5 3.8-5 7.2s2.3 5.9 5 7.2z" fill="currentColor"/></svg>';
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" fill="currentColor"/></svg>';
 
 /* ---------------------------- helpers ----------------------------------- */
 
@@ -659,9 +659,14 @@ async function toggleFavorite(id) {
 async function toggleHide(id) {
   const game = gameById(id);
   if (!game) return;
-  await api.toggleHide(id);
-  await refreshState();
-  render();
+  try {
+    await api.toggleHide(id);
+    await refreshState();
+    render();
+    toast(game.hidden ? 'Játék visszáhozva a listára.' : 'Játék elrejtve.', 'success');
+  } catch (err) {
+    toast(`Nem sikerült elrejteni a játékot: ${err.message}`, 'error');
+  }
 }
 
 async function rescan(button) {
