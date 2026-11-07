@@ -141,10 +141,13 @@ async function refreshState() {
 function visibleGames() {
   let list = games().slice();
 
-  list = list.filter((game) => !game.hidden);
-
-  if (state.view === 'favorites') list = list.filter((game) => game.favorite);
-  if (state.view === 'running') list = list.filter((game) => game.running);
+  if (state.view === 'hidden') {
+    list = list.filter((game) => game.hidden);
+  } else {
+    list = list.filter((game) => !game.hidden);
+    if (state.view === 'favorites') list = list.filter((game) => game.favorite);
+    if (state.view === 'running') list = list.filter((game) => game.running);
+  }
 
   const query = fold(state.query);
   if (query) {
@@ -219,12 +222,14 @@ function render() {
   el('count-library').textContent = String(all.length);
   el('count-favorites').textContent = String(favorites);
   el('count-running').textContent = String(running);
+  el('count-hidden').textContent = String(all.filter((game) => game.hidden).length);
   el('stat-total').textContent = formatTotal(all);
 
   const titles = {
     library: ['Könyvtár', `${list.length} játék`],
     favorites: ['Kedvencek', `${list.length} játék`],
-    running: ['Futó játékok', `${list.length} fut`]
+    running: ['Futó játékok', `${list.length} fut`],
+    hidden: ['Rejtett játékok', `${list.length} rejtett`]
   };
   el('view-title').textContent = titles[state.view][0];
   el('view-subtitle').textContent = titles[state.view][1];
@@ -251,6 +256,10 @@ function render() {
       el('empty-title').textContent = 'Jelenleg semmi sem fut';
       el('empty-text').textContent =
         'Amikor elindítasz egy játékot innen, itt fogod látni, és itt számoljuk a játékidőt.';
+    } else if (state.view === 'hidden') {
+      el('empty-title').textContent = 'Nincs rejtett játék';
+      el('empty-text').textContent =
+        'A rejtett játékok itt fognak megjelenni. A könyvtárban lévő játékoknál a szem ikonra kattintva rejtheted el őket.';
     } else if (!all.length) {
       el('empty-title').textContent = 'Még nincs játékod';
       el('empty-text').textContent =
