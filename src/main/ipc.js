@@ -124,6 +124,7 @@ function registerIpc({ library, getWindow }) {
         title: game.title,
         folder: game.folder,
         folderDisplay: displayPath(game.folder),
+        hidden: game.hidden,
         launch: {
           ...game.launch,
           pathDisplay: displayPath(game.launch.path || '')
